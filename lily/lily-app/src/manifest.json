@@ -1,0 +1,20 @@
+{
+  "name": "L.I.L.Y",
+  "short_name": "LILY",
+  "start_url": "./index.html",
+  "display": "fullscreen",
+  "background_color": "#111111",
+  "theme_color": "#FFD600",
+  "icons": [
+    {
+      "src": "logo.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
