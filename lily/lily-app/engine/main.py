@@ -8,30 +8,17 @@ from vosk import Model, KaldiRecognizer
 import edge_tts
 import pygame
 import keyboard
-from groq import Groq
 import zipfile
 import urllib.request
 
-# --- CONFIGURAÇÃO DA IA ---
-client_groq = Groq(api_key="SUA_CHAVE_AQUI")
-
-
-# --- ADICIONE ESTA FUNÇÃO QUE ESTÁ FALTANDO ---
 async def processar_com_ia(texto_usuario):
     try:
-        completion = client_groq.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=[
-                {"role": "system", "content": "Você é a L.I.L.Y., use gírias de programador e responda curto."},
-                {"role": "user", "content": texto_usuario}
-            ],
-            temperature=0.7,
-            max_tokens=150
-        )
-        return completion.choices[0].message.content
+        from lily_bridge import ask_lily
+
+        return ask_lily(texto_usuario)
     except Exception as e:
-        print(f"ERRO NA GROQ: {e}")
-        return "Tive um erro de conexão com meu cérebro, chefe."
+        print(f"ERRO NA IA: {e}")
+        return "Tive um erro de conexao com meu cerebro, chefe."
 
 # --- CONFIGURAÇÕES DE CAMINHOS ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -112,3 +99,4 @@ if __name__ == "__main__":
         asyncio.run(iniciar_lily())
     except KeyboardInterrupt:
         print("\nLily encerrada.")
+

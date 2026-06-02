@@ -986,6 +986,7 @@ function App() {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [lilyVoiceStatus, setLilyVoiceStatus] =
     useState<LilyVoiceStatus>("idle");
+  const [lilyIsSpeaking, setLilyIsSpeaking] = useState(false);
   const [lilyAssistantOpen, setLilyAssistantOpen] = useState(false);
   const [lilyAssistantMode, setLilyAssistantMode] =
     useState<LilyAssistantMode>(null);
@@ -1074,6 +1075,16 @@ function App() {
     stopping: t("lilyVoiceStopping"),
     error: t("lilyVoiceError"),
   }[lilyVoiceStatus];
+  const lilyCoreStateClass = [
+    "lily-core",
+    lilyVoiceStatus === "active" ? "is-listening" : "",
+    lilyVoiceStatus === "starting" || lilyVoiceStatus === "stopping"
+      ? "is-syncing"
+      : "",
+    lilyIsSpeaking || lilyChatBusy ? "is-speaking" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   function notify(message: string, tone: ToastTone = "info") {
     const id = Date.now();
@@ -1312,6 +1323,7 @@ function App() {
       setLilyVoiceStatus("stopping");
       browserRecognitionRef.current?.stop();
       window.speechSynthesis.cancel();
+      setLilyIsSpeaking(false);
       browserRecognitionRef.current = null;
       setLilyVoiceStatus("idle");
       notify(t("lilyVoiceStopped"), "info");
@@ -1424,6 +1436,9 @@ function App() {
     if (preferredVoice) {
       utterance.voice = preferredVoice;
     }
+    utterance.onstart = () => setLilyIsSpeaking(true);
+    utterance.onend = () => setLilyIsSpeaking(false);
+    utterance.onerror = () => setLilyIsSpeaking(false);
     window.speechSynthesis.cancel();
     window.speechSynthesis.speak(utterance);
   }
@@ -1844,16 +1859,16 @@ function App() {
         return;
       }
     } else
-    if (isFirebaseConfigured && db && current?.docId) {
-      try {
-        await deleteDoc(doc(db, "accounts", current.docId));
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : t("alertDeleteError");
-        notify(`${t("alertDeleteError")}: ${message}`, "error");
-        return;
+      if (isFirebaseConfigured && db && current?.docId) {
+        try {
+          await deleteDoc(doc(db, "accounts", current.docId));
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : t("alertDeleteError");
+          notify(`${t("alertDeleteError")}: ${message}`, "error");
+          return;
+        }
       }
-    }
 
     setAccounts((prev) => prev.filter((item) => item.id !== id));
     if (selectedAccountId === id) {
@@ -2783,14 +2798,17 @@ function App() {
               <div className="lily-orbit-stage">
                 <button
                   type="button"
-                  className="lily-core"
+                  className={lilyCoreStateClass}
                   aria-label={t("lilyCoreLabel")}
                   onClick={() => setLilyAssistantOpen((prev) => !prev)}
                 >
                   <span className="lily-core-ring ring-one" />
                   <span className="lily-core-ring ring-two" />
+                  <span className="lily-core-ring ring-three" />
+                  <span className="lily-core-grid" />
+                  <span className="lily-core-nodes" />
+                  <span className="lily-core-scan" />
                   <span className="lily-core-pulse" />
-                  <span className="lily-core-letter">L</span>
                 </button>
 
                 <div className="lily-core-copy">
