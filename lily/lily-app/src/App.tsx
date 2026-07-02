@@ -38,10 +38,16 @@ type OwnerType = "estoque" | "cliente";
 type Locale = "pt-BR" | "en-US";
 type ToastTone = "success" | "error" | "info";
 type LilyVoiceStatus = "idle" | "starting" | "active" | "stopping" | "error";
+type AccountImageStatus = "empty" | "ready" | "analyzing" | "done";
 type LilyChatMessage = {
   id: number;
   author: "user" | "lily";
   text: string;
+};
+type LilyWebResponse = {
+  reply?: string;
+  audio?: string;
+  error?: string;
 };
 type LilyAssistantMode = "voice" | "chat" | null;
 type BrowserSpeechRecognitionResult = {
@@ -54,12 +60,15 @@ type BrowserSpeechRecognitionEvent = Event & {
     [index: number]: BrowserSpeechRecognitionResult;
   };
 };
+type BrowserSpeechRecognitionErrorEvent = Event & {
+  error?: string;
+};
 type BrowserSpeechRecognition = {
   lang: string;
   continuous: boolean;
   interimResults: boolean;
   onresult: ((event: BrowserSpeechRecognitionEvent) => void) | null;
-  onerror: (() => void) | null;
+  onerror: ((event: BrowserSpeechRecognitionErrorEvent) => void) | null;
   onend: (() => void) | null;
   start: () => void;
   stop: () => void;
@@ -253,6 +262,9 @@ const defaultProfileForm: ProfileForm = {
   newPassword: "",
   confirmPassword: "",
 };
+
+const lilyWebServerUrl =
+  import.meta.env.VITE_LILY_WEB_SERVER_URL ?? "http://127.0.0.1:8765";
 
 const defaultLilyChatMessages: LilyChatMessage[] = [
   {
@@ -474,6 +486,22 @@ const translations = {
     alertAccountSaved: "Conta salva com sucesso.",
     alertClientRequired: "Nome/Razão Social e documento são obrigatórios.",
     alertRemoveClient: "Deseja remover este cliente?",
+    accountImageTitle: "Imagem para reconhecimento",
+    accountImageSubtitle:
+      "Insira ou capture uma foto da peca para preencher marca, veiculo e tipo com TensorFlow/Gemini.",
+    accountImageUpload: "Inserir imagem",
+    accountImageCapture: "Capturar",
+    accountImageAnalyze: "Reconhecer",
+    accountImageRemove: "Remover",
+    accountImageEmpty: "Nenhuma imagem selecionada.",
+    accountImageReady: "Imagem pronta para analise.",
+    accountImageAnalyzing: "Analisando imagem...",
+    accountImageDone: "Campos preenchidos com base na imagem.",
+    accountImageInvalid: "Escolha uma imagem JPG, PNG ou WEBP.",
+    accountImagePlaceholder: "Preview da imagem",
+    accountDataSection: "Dados da conta",
+    accountOwnerSection: "Proprietario",
+    accountValuesSection: "Valores",
   },
   "en-US": {
     appSubtitle: "From Santa Rita Radiadores",
@@ -686,6 +714,22 @@ const translations = {
     alertAccountSaved: "Account saved successfully.",
     alertClientRequired: "Name/company name and document are required.",
     alertRemoveClient: "Remove this client?",
+    accountImageTitle: "Image recognition",
+    accountImageSubtitle:
+      "Insert or capture a part photo to fill brand, vehicle and type with TensorFlow/Gemini.",
+    accountImageUpload: "Insert image",
+    accountImageCapture: "Capture",
+    accountImageAnalyze: "Recognize",
+    accountImageRemove: "Remove",
+    accountImageEmpty: "No image selected.",
+    accountImageReady: "Image ready for analysis.",
+    accountImageAnalyzing: "Analyzing image...",
+    accountImageDone: "Fields filled from the image.",
+    accountImageInvalid: "Choose a JPG, PNG or WEBP image.",
+    accountImagePlaceholder: "Image preview",
+    accountDataSection: "Account data",
+    accountOwnerSection: "Owner",
+    accountValuesSection: "Values",
   },
 } satisfies Record<Locale, Record<string, string>>;
 
@@ -995,7 +1039,12 @@ function App() {
   );
   const [lilyChatInput, setLilyChatInput] = useState("");
   const [lilyChatBusy, setLilyChatBusy] = useState(false);
+  const [browserVoices, setBrowserVoices] = useState<SpeechSynthesisVoice[]>([]);
   const browserRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+  const browserVoiceActiveRef = useRef(false);
+  const browserRecognitionListeningRef = useRef(false);
+  const browserIsSpeakingRef = useRef(false);
+  const browserChatBusyRef = useRef(false);
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [registerForm, setRegisterForm] = useState<RegisterForm>(
@@ -1014,6 +1063,10 @@ function App() {
   const [results, setResults] = useState<Results | null>(null);
   const [accountModalOpen, setAccountModalOpen] = useState(false);
   const [accountForm, setAccountForm] = useState<AccountForm>(defaultAccountForm);
+  const [accountImagePreview, setAccountImagePreview] = useState("");
+  const [accountImageFileName, setAccountImageFileName] = useState("");
+  const [accountImageStatus, setAccountImageStatus] =
+    useState<AccountImageStatus>("empty");
   const [settingsModal, setSettingsModal] = useState<
     null | "hora" | "pecas" | "clientes"
   >(null);
@@ -1085,6 +1138,12 @@ function App() {
   ]
     .filter(Boolean)
     .join(" ");
+  const accountImageStatusText = {
+    empty: t("accountImageEmpty"),
+    ready: t("accountImageReady"),
+    analyzing: t("accountImageAnalyzing"),
+    done: t("accountImageDone"),
+  }[accountImageStatus];
 
   function notify(message: string, tone: ToastTone = "info") {
     const id = Date.now();
@@ -1108,11 +1167,44 @@ function App() {
 
   useEffect(
     () => () => {
+      browserVoiceActiveRef.current = false;
       browserRecognitionRef.current?.abort();
       window.speechSynthesis?.cancel();
     },
     [],
   );
+
+  useEffect(
+    () => () => {
+      if (accountImagePreview) {
+        URL.revokeObjectURL(accountImagePreview);
+      }
+    },
+    [accountImagePreview],
+  );
+
+  useEffect(() => {
+    if (!("speechSynthesis" in window)) return;
+
+    const loadVoices = () => {
+      setBrowserVoices(window.speechSynthesis.getVoices());
+    };
+
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+
+    return () => {
+      window.speechSynthesis.onvoiceschanged = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    browserIsSpeakingRef.current = lilyIsSpeaking;
+  }, [lilyIsSpeaking]);
+
+  useEffect(() => {
+    browserChatBusyRef.current = lilyChatBusy;
+  }, [lilyChatBusy]);
 
   useEffect(() => {
     if (userData) {
@@ -1321,6 +1413,8 @@ function App() {
   function toggleBrowserLilyVoice() {
     if (lilyVoiceStatus === "active") {
       setLilyVoiceStatus("stopping");
+      browserVoiceActiveRef.current = false;
+      browserRecognitionListeningRef.current = false;
       browserRecognitionRef.current?.stop();
       window.speechSynthesis.cancel();
       setLilyIsSpeaking(false);
@@ -1338,28 +1432,43 @@ function App() {
 
     try {
       setLilyVoiceStatus("starting");
+      browserVoiceActiveRef.current = true;
       const recognition = new browserSpeechRecognition();
       recognition.lang = locale === "pt-BR" ? "pt-BR" : "en-US";
       recognition.continuous = true;
       recognition.interimResults = false;
       recognition.onresult = (event) => {
+        if (browserIsSpeakingRef.current || browserChatBusyRef.current) return;
         const result = event.results[event.results.length - 1];
         const transcript = result?.[0]?.transcript?.trim();
         if (!transcript) return;
         void handleLilyIncomingMessage(transcript, true);
       };
-      recognition.onerror = () => {
+      recognition.onerror = (event) => {
+        browserRecognitionListeningRef.current = false;
+        if (!browserVoiceActiveRef.current) return;
+
+        if (event.error === "no-speech" || event.error === "aborted") {
+          restartBrowserRecognition();
+          return;
+        }
+
         setLilyVoiceStatus("error");
-        notify(t("lilyVoiceErrorMessage"), "error");
+        notify(`${t("lilyVoiceErrorMessage")}: ${event.error ?? ""}`.trim(), "error");
       };
       recognition.onend = () => {
-        setLilyVoiceStatus((prev) => (prev === "active" ? "idle" : prev));
+        browserRecognitionListeningRef.current = false;
+        if (!browserVoiceActiveRef.current) {
+          setLilyVoiceStatus((prev) => (prev === "active" ? "idle" : prev));
+          return;
+        }
+        restartBrowserRecognition();
       };
-      recognition.start();
       browserRecognitionRef.current = recognition;
+      startBrowserRecognition();
       setLilyVoiceStatus("active");
       notify(t("lilyVoiceWebStarted"), "success");
-      speakWithBrowserVoice(
+      void speakWithPreferredWebVoice(
         locale === "pt-BR"
           ? "Lily ativa no navegador. Pode falar comigo."
           : "Lily is active in the browser. You can talk to me.",
@@ -1370,6 +1479,33 @@ function App() {
         error instanceof Error ? error.message : String(error || t("lilyVoiceError"));
       notify(`${t("lilyVoiceErrorMessage")}: ${message}`, "error");
     }
+  }
+
+  function startBrowserRecognition() {
+    const recognition = browserRecognitionRef.current;
+    if (
+      !recognition ||
+      !browserVoiceActiveRef.current ||
+      browserRecognitionListeningRef.current ||
+      browserIsSpeakingRef.current
+    ) {
+      return;
+    }
+
+    try {
+      recognition.start();
+      browserRecognitionListeningRef.current = true;
+      setLilyVoiceStatus("active");
+    } catch {
+      browserRecognitionListeningRef.current = false;
+    }
+  }
+
+  function restartBrowserRecognition(delay = 350) {
+    window.setTimeout(() => {
+      if (!browserVoiceActiveRef.current || browserIsSpeakingRef.current) return;
+      startBrowserRecognition();
+    }, delay);
   }
 
   async function handleSendLilyChat() {
@@ -1390,9 +1526,12 @@ function App() {
     setLilyChatBusy(true);
 
     try {
+      const webReply = isTauriRuntime
+        ? null
+        : await askLilyWeb(message, shouldSpeak);
       const reply = isTauriRuntime
         ? await invoke<string>("ask_lily_chat", { message, speak: shouldSpeak })
-        : createLocalLilyReply(message);
+        : webReply?.reply || createLocalLilyReply(message);
 
       setLilyChatMessages((prev) => [
         ...prev,
@@ -1403,7 +1542,11 @@ function App() {
         },
       ]);
       if (shouldSpeak && !isTauriRuntime) {
-        speakWithBrowserVoice(reply || createLocalLilyReply(message));
+        if (webReply?.audio) {
+          playLilyWebAudio(webReply.audio);
+        } else {
+          void speakWithPreferredWebVoice(reply || createLocalLilyReply(message));
+        }
       }
     } catch {
       setLilyChatMessages((prev) => [
@@ -1419,26 +1562,128 @@ function App() {
     }
   }
 
+  async function askLilyWeb(message: string, speak: boolean) {
+    try {
+      const response = await fetch(`${lilyWebServerUrl}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message, speak }),
+      });
+      if (!response.ok) return null;
+      const data = (await response.json()) as LilyWebResponse;
+      if (data.error) return null;
+      return data;
+    } catch {
+      return null;
+    }
+  }
+
+  async function speakWithPreferredWebVoice(text: string) {
+    try {
+      const response = await fetch(`${lilyWebServerUrl}/speak`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, speak: true }),
+      });
+      if (response.ok) {
+        const data = (await response.json()) as LilyWebResponse;
+        if (data.audio) {
+          playLilyWebAudio(data.audio);
+          return;
+        }
+      }
+    } catch {
+      // Fallback below keeps browser-only voice usable if the local server is off.
+    }
+
+    speakWithBrowserVoice(text);
+  }
+
+  function playLilyWebAudio(base64Audio: string) {
+    browserIsSpeakingRef.current = true;
+    browserRecognitionListeningRef.current = false;
+    browserRecognitionRef.current?.stop();
+    window.speechSynthesis?.cancel();
+    setLilyIsSpeaking(true);
+
+    const audio = new Audio(`data:audio/mpeg;base64,${base64Audio}`);
+    audio.onended = () => {
+      browserIsSpeakingRef.current = false;
+      setLilyIsSpeaking(false);
+      restartBrowserRecognition();
+    };
+    audio.onerror = () => {
+      browserIsSpeakingRef.current = false;
+      setLilyIsSpeaking(false);
+      restartBrowserRecognition();
+    };
+    void audio.play().catch(() => {
+      browserIsSpeakingRef.current = false;
+      setLilyIsSpeaking(false);
+      restartBrowserRecognition();
+    });
+  }
+
   function speakWithBrowserVoice(text: string) {
     if (!("speechSynthesis" in window)) return;
+    browserIsSpeakingRef.current = true;
+    browserRecognitionListeningRef.current = false;
+    browserRecognitionRef.current?.stop();
+
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = locale === "pt-BR" ? "pt-BR" : "en-US";
-    const voices = window.speechSynthesis.getVoices();
-    const preferredVoice =
-      voices.find(
-        (voice) =>
-          voice.lang.toLowerCase().startsWith(utterance.lang.toLowerCase()) &&
-          /francisca|maria|female|natural/i.test(voice.name),
-      ) ??
-      voices.find((voice) =>
-        voice.lang.toLowerCase().startsWith(utterance.lang.toLowerCase()),
-      );
+    utterance.rate = locale === "pt-BR" ? 0.94 : 0.98;
+    utterance.pitch = 1.02;
+    utterance.volume = 1;
+
+    const voices = browserVoices.length
+      ? browserVoices
+      : window.speechSynthesis.getVoices();
+
+    if (voices.length === 0) {
+      browserIsSpeakingRef.current = false;
+      window.setTimeout(() => speakWithBrowserVoice(text), 250);
+      return;
+    }
+
+    const targetLang = utterance.lang.toLowerCase();
+    const scoreVoice = (voice: SpeechSynthesisVoice) => {
+      const name = voice.name.toLowerCase();
+      const lang = voice.lang.toLowerCase();
+      let score = 0;
+
+      if (lang === targetLang) score += 12;
+      else if (lang.startsWith(targetLang.split("-")[0])) score += 5;
+      if (/francisca|maria|female|natural|online/.test(name)) score += 6;
+      if (/google|helena|luciana/.test(name)) score += 3;
+      if (/male|daniel/.test(name)) score -= 4;
+      if (voice.localService) score += 1;
+
+      return score;
+    };
+    const preferredVoice = voices
+      .filter((voice) =>
+        voice.lang.toLowerCase().startsWith(targetLang.split("-")[0]),
+      )
+      .sort((a, b) => scoreVoice(b) - scoreVoice(a))[0];
+
     if (preferredVoice) {
       utterance.voice = preferredVoice;
     }
-    utterance.onstart = () => setLilyIsSpeaking(true);
-    utterance.onend = () => setLilyIsSpeaking(false);
-    utterance.onerror = () => setLilyIsSpeaking(false);
+    utterance.onstart = () => {
+      browserIsSpeakingRef.current = true;
+      setLilyIsSpeaking(true);
+    };
+    utterance.onend = () => {
+      browserIsSpeakingRef.current = false;
+      setLilyIsSpeaking(false);
+      restartBrowserRecognition();
+    };
+    utterance.onerror = () => {
+      browserIsSpeakingRef.current = false;
+      setLilyIsSpeaking(false);
+      restartBrowserRecognition();
+    };
     window.speechSynthesis.cancel();
     window.speechSynthesis.speak(utterance);
   }
@@ -1459,11 +1704,79 @@ function App() {
     return "Recebi sua mensagem. Por enquanto este chat está no modo assistente local; quando ligarmos a IA, eu respondo com mais contexto.";
   }
 
+  function handleAccountImageFile(file?: File | null) {
+    if (!file) return;
+
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      notify(t("accountImageInvalid"), "error");
+      return;
+    }
+
+    const previewUrl = URL.createObjectURL(file);
+    setAccountImagePreview((current) => {
+      if (current) URL.revokeObjectURL(current);
+      return previewUrl;
+    });
+    setAccountImageFileName(file.name);
+    setAccountImageStatus("ready");
+  }
+
+  function clearAccountImage() {
+    setAccountImagePreview((current) => {
+      if (current) URL.revokeObjectURL(current);
+      return "";
+    });
+    setAccountImageFileName("");
+    setAccountImageStatus("empty");
+  }
+
+  function normalizeImageToken(value: string) {
+    return value
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+  }
+
+  function applyAccountImageRecognition() {
+    if (!accountImagePreview) return;
+
+    setAccountImageStatus("analyzing");
+
+    const source = normalizeImageToken(accountImageFileName);
+    const recognizedBrand = marcas.find((marca) =>
+      source.includes(normalizeImageToken(marca)),
+    );
+    const recognizedPiece = config.pecas.find((piece) =>
+      source.includes(normalizeImageToken(piece)),
+    );
+    const guessedVehicle = source
+      .replace(/\.[a-z0-9]+$/i, "")
+      .replace(/[_-]+/g, " ")
+      .replace(/\b(img|image|foto|peca|radiador|intercooler|condensador|caixa)\b/g, "")
+      .replace(recognizedBrand ? normalizeImageToken(recognizedBrand) : "", "")
+      .replace(recognizedPiece ? normalizeImageToken(recognizedPiece) : "", "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    setAccountForm((prev) => ({
+      ...prev,
+      marca: recognizedBrand || prev.marca,
+      tipoPeca: recognizedPiece || prev.tipoPeca,
+      veiculo: guessedVehicle
+        ? guessedVehicle.replace(/\b\w/g, (letter) => letter.toUpperCase())
+        : prev.veiculo,
+    }));
+
+    setAccountImageStatus("done");
+    notify(t("accountImageDone"), "success");
+  }
+
   function handleNewAccount() {
     setSelectedAccountId(null);
     setMainInputs(defaultMainInputs);
     setResults(null);
     setAccountForm(defaultAccountForm);
+    clearAccountImage();
   }
 
   function applyAccountToForm(account: LilyAccount) {
@@ -1493,6 +1806,7 @@ function App() {
       vendidoPorInput: account.vendidoPor,
       maoDeObraInput: account.maoDeObra,
     });
+    clearAccountImage();
     setResults(calculateResults(nextInputs, account.modo, config.valorHora || 40));
   }
 
@@ -3168,134 +3482,223 @@ function App() {
 
       {accountModalOpen && (
         <div className="modal active">
-          <div className="modal-content">
-            <h2>{accountModalTitle}</h2>
-
-            <select
-              value={accountForm.marca}
-              onChange={(event) =>
-                setAccountForm((prev) => ({ ...prev, marca: event.target.value }))
-              }
-            >
-              <option value="">{t("selectBrand")}</option>
-              {marcas.map((marca) => (
-                <option key={marca} value={marca}>
-                  {marca}
-                </option>
-              ))}
-            </select>
-
-            <input
-              type="text"
-              placeholder={t("vehicleName")}
-              value={accountForm.veiculo}
-              onChange={(event) =>
-                setAccountForm((prev) => ({ ...prev, veiculo: event.target.value }))
-              }
-            />
-
-            <select
-              value={accountForm.tipoPeca}
-              onChange={(event) =>
-                setAccountForm((prev) => ({ ...prev, tipoPeca: event.target.value }))
-              }
-            >
-              <option value="">{t("selectPieceType")}</option>
-              {config.pecas.map((piece) => (
-                <option key={piece} value={piece}>
-                  {piece}
-                </option>
-              ))}
-            </select>
-
-            <div className="tipo-proprietario">
-              <label>
-                <input
-                  type="radio"
-                  name="tipoProprietario"
-                  checked={accountForm.tipoProprietario === "estoque"}
-                  onChange={() =>
-                    setAccountForm((prev) => ({
-                      ...prev,
-                      tipoProprietario: "estoque",
-                    }))
-                  }
-                />
-                {t("ourStock")}
-              </label>
-              <label>
-                <input
-                  type="radio"
-                  name="tipoProprietario"
-                  checked={accountForm.tipoProprietario === "cliente"}
-                  onChange={() =>
-                    setAccountForm((prev) => ({
-                      ...prev,
-                      tipoProprietario: "cliente",
-                    }))
-                  }
-                />
-                {t("singleClient")}
-              </label>
+          <div className="modal-content account-modal">
+            <div className="account-modal-header">
+              <div>
+                <span>{selectedAccount ? t("editAccount") : t("newAccount")}</span>
+                <h2>{accountModalTitle}</h2>
+              </div>
+              <button
+                className="close-modal"
+                onClick={() => {
+                  setAccountModalOpen(false);
+                }}
+                aria-label={t("cancel")}
+              >
+                ×
+              </button>
             </div>
 
-            {accountForm.tipoProprietario === "cliente" && (
-              <>
-                <select
-                  value={accountForm.clienteSelect}
-                  onChange={(event) =>
-                    setAccountForm((prev) => ({
-                      ...prev,
-                      clienteSelect: event.target.value,
-                    }))
-                  }
-                >
-                  <option value="">{t("selectRegisteredClient")}</option>
-                  {config.clientes.map((client) => (
-                    <option key={client.id} value={client.id}>
-                      {client.nome} ({client.tipo})
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="text"
-                  placeholder={t("clientPhone")}
-                  value={accountForm.clienteTelefone}
-                  onChange={(event) =>
-                    setAccountForm((prev) => ({
-                      ...prev,
-                      clienteTelefone: formatPhone(event.target.value),
-                    }))
-                  }
-                />
-              </>
-            )}
+            <div className="account-modal-grid">
+              <section className="account-image-panel">
+                <div>
+                  <h3>{t("accountImageTitle")}</h3>
+                  <p>{t("accountImageSubtitle")}</p>
+                </div>
 
-            <input
-              type="text"
-              placeholder={t("soldByValue")}
-              value={accountForm.vendidoPorInput}
-              onChange={(event) =>
-                setAccountForm((prev) => ({
-                  ...prev,
-                  vendidoPorInput: event.target.value,
-                }))
-              }
-            />
+                <div className="account-image-preview">
+                  {accountImagePreview ? (
+                    <img src={accountImagePreview} alt={accountImageFileName} />
+                  ) : (
+                    <span>{t("accountImagePlaceholder")}</span>
+                  )}
+                </div>
 
-            <input
-              type="text"
-              placeholder={t("laborValue")}
-              value={accountForm.maoDeObraInput}
-              onChange={(event) =>
-                setAccountForm((prev) => ({
-                  ...prev,
-                  maoDeObraInput: event.target.value,
-                }))
-              }
-            />
+                <div className="account-image-status">{accountImageStatusText}</div>
 
-            <div className="modal-buttons">
+                <div className="account-image-actions">
+                  <label className="file-button account-image-button">
+                    {t("accountImageUpload")}
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      onChange={(event) => {
+                        handleAccountImageFile(event.target.files?.[0]);
+                        event.currentTarget.value = "";
+                      }}
+                    />
+                  </label>
+                  <label className="file-button account-image-button secondary">
+                    {t("accountImageCapture")}
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      capture="environment"
+                      onChange={(event) => {
+                        handleAccountImageFile(event.target.files?.[0]);
+                        event.currentTarget.value = "";
+                      }}
+                    />
+                  </label>
+                  <button
+                    className="account-image-button"
+                    disabled={!accountImagePreview || accountImageStatus === "analyzing"}
+                    onClick={applyAccountImageRecognition}
+                  >
+                    {t("accountImageAnalyze")}
+                  </button>
+                  {accountImagePreview && (
+                    <button
+                      className="account-image-button button-muted"
+                      onClick={clearAccountImage}
+                    >
+                      {t("accountImageRemove")}
+                    </button>
+                  )}
+                </div>
+              </section>
+
+              <div className="account-form-panel">
+                <section className="account-form-section">
+                  <h3>{t("accountDataSection")}</h3>
+                  <div className="account-form-grid">
+                    <select
+                      value={accountForm.marca}
+                      onChange={(event) =>
+                        setAccountForm((prev) => ({ ...prev, marca: event.target.value }))
+                      }
+                    >
+                      <option value="">{t("selectBrand")}</option>
+                      {marcas.map((marca) => (
+                        <option key={marca} value={marca}>
+                          {marca}
+                        </option>
+                      ))}
+                    </select>
+
+                    <input
+                      type="text"
+                      placeholder={t("vehicleName")}
+                      value={accountForm.veiculo}
+                      onChange={(event) =>
+                        setAccountForm((prev) => ({ ...prev, veiculo: event.target.value }))
+                      }
+                    />
+
+                    <select
+                      value={accountForm.tipoPeca}
+                      onChange={(event) =>
+                        setAccountForm((prev) => ({ ...prev, tipoPeca: event.target.value }))
+                      }
+                    >
+                      <option value="">{t("selectPieceType")}</option>
+                      {config.pecas.map((piece) => (
+                        <option key={piece} value={piece}>
+                          {piece}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </section>
+
+                <section className="account-form-section">
+                  <h3>{t("accountOwnerSection")}</h3>
+                  <div className="tipo-proprietario">
+                    <label>
+                      <input
+                        type="radio"
+                        name="tipoProprietario"
+                        checked={accountForm.tipoProprietario === "estoque"}
+                        onChange={() =>
+                          setAccountForm((prev) => ({
+                            ...prev,
+                            tipoProprietario: "estoque",
+                          }))
+                        }
+                      />
+                      {t("ourStock")}
+                    </label>
+                    <label>
+                      <input
+                        type="radio"
+                        name="tipoProprietario"
+                        checked={accountForm.tipoProprietario === "cliente"}
+                        onChange={() =>
+                          setAccountForm((prev) => ({
+                            ...prev,
+                            tipoProprietario: "cliente",
+                          }))
+                        }
+                      />
+                      {t("singleClient")}
+                    </label>
+                  </div>
+
+                  {accountForm.tipoProprietario === "cliente" && (
+                    <div className="account-form-grid two">
+                      <select
+                        value={accountForm.clienteSelect}
+                        onChange={(event) =>
+                          setAccountForm((prev) => ({
+                            ...prev,
+                            clienteSelect: event.target.value,
+                          }))
+                        }
+                      >
+                        <option value="">{t("selectRegisteredClient")}</option>
+                        {config.clientes.map((client) => (
+                          <option key={client.id} value={client.id}>
+                            {client.nome} ({client.tipo})
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="text"
+                        placeholder={t("clientPhone")}
+                        value={accountForm.clienteTelefone}
+                        onChange={(event) =>
+                          setAccountForm((prev) => ({
+                            ...prev,
+                            clienteTelefone: formatPhone(event.target.value),
+                          }))
+                        }
+                      />
+                    </div>
+                  )}
+                </section>
+
+                <section className="account-form-section">
+                  <h3>{t("accountValuesSection")}</h3>
+                  <div className="account-form-grid two">
+                    <input
+                      type="text"
+                      placeholder={t("soldByValue")}
+                      value={accountForm.vendidoPorInput}
+                      onChange={(event) =>
+                        setAccountForm((prev) => ({
+                          ...prev,
+                          vendidoPorInput: event.target.value,
+                        }))
+                      }
+                    />
+
+                    <input
+                      type="text"
+                      placeholder={t("laborValue")}
+                      value={accountForm.maoDeObraInput}
+                      onChange={(event) =>
+                        setAccountForm((prev) => ({
+                          ...prev,
+                          maoDeObraInput: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                </section>
+              </div>
+            </div>
+
+            <div className="modal-buttons account-modal-actions">
               <button onClick={() => void handleSaveAccount()}>{accountSaveLabel}</button>
               <button
                 className="button-muted"

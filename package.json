@@ -1,0 +1,11 @@
+{
+  "name": "lily",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "npm --prefix lily/lily-app run dev",
+    "build": "npm --prefix lily/lily-app run build",
+    "api:dev": ".\\tools\\apache-maven-3.9.16\\bin\\mvn.cmd -f lily\\lily-api\\pom.xml spring-boot:run",
+    "api:build": ".\\tools\\apache-maven-3.9.16\\bin\\mvn.cmd -f lily\\lily-api\\pom.xml test"
+  }
+}

@@ -1,8 +1,11 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 use std::{
+    fs::File,
     path::PathBuf,
     process::{Child, Command, Stdio},
     sync::Mutex,
+    thread,
+    time::Duration,
 };
 
 use tauri::Manager;
@@ -35,18 +38,36 @@ fn start_lily_voice(
     let engine_dir = find_engine_dir(&app)?;
     let python = find_python_executable(&engine_dir);
     let script = engine_dir.join("main.py");
+    let log_path = engine_dir.join("lily_voice.log");
+    let log_file = File::create(&log_path)
+        .map_err(|error| format!("Nao foi possivel criar o log da voz: {error}"))?;
+    let log_file_for_stderr = log_file
+        .try_clone()
+        .map_err(|error| format!("Nao foi possivel preparar o log da voz: {error}"))?;
 
-    let child = Command::new(python)
+    let mut child = Command::new(python)
         .arg(script)
         .current_dir(engine_dir)
         .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stdout(Stdio::from(log_file))
+        .stderr(Stdio::from(log_file_for_stderr))
         .spawn()
         .map_err(|error| format!("Falha ao iniciar o motor Python: {error}"))?;
 
+    thread::sleep(Duration::from_millis(900));
+    if let Some(status) = child.try_wait().map_err(|error| error.to_string())? {
+        let log = std::fs::read_to_string(&log_path).unwrap_or_default();
+        let details = log.trim();
+        if details.is_empty() {
+            return Err(format!("O motor Python encerrou logo apos iniciar: {status}"));
+        }
+        return Err(format!(
+            "O motor Python encerrou logo apos iniciar: {status}. Log: {details}"
+        ));
+    }
+
     *child_slot = Some(child);
-    Ok("started".to_string())
+    Ok(format!("started: {}", log_path.display()))
 }
 
 #[tauri::command]

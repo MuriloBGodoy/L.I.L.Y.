@@ -1,0 +1,7 @@
+/tools/
+/lily/lily-api/target/
+firebase-service-account*.json
+service-account*.json
+/lily/lily-app/.env
+firebase-debug.log
+__pycache__/
