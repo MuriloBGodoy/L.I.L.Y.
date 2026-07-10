@@ -1654,10 +1654,12 @@ function App() {
 
       if (lang === targetLang) score += 12;
       else if (lang.startsWith(targetLang.split("-")[0])) score += 5;
-      if (/francisca|maria|female|natural|online/.test(name)) score += 6;
-      if (/google|helena|luciana/.test(name)) score += 3;
-      if (/male|daniel/.test(name)) score -= 4;
-      if (voice.localService) score += 1;
+      if (name.includes("francisca") || name.includes("franciscaneural")) score += 20;
+      if (/maria|helena|luciana/.test(name)) score += 8;
+      if (/female|natural|online/.test(name)) score += 4;
+      if (/google|cloud/.test(name)) score += 3;
+      if (/male|daniel|paulo/.test(name)) score -= 4;
+      if (voice.localService) score += 2;
 
       return score;
     };
