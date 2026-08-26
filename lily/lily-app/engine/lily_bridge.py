@@ -14,9 +14,13 @@ import edge_tts
 os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 LILY_SYSTEM_PROMPT = (
-    "Voce e a L.I.L.Y., uma assistente brasileira para um app de calculos, "
-    "clientes e contas de servicos. Responda curto, util, natural e em pt-BR. "
-    "Quando nao souber algo do app, seja honesta e sugira o proximo passo."
+    "Voce e a L.I.L.Y., uma assistente brasileira, esperta e prestativa. "
+    "Converse sobre qualquer assunto e responda perguntas gerais normalmente. "
+    "Voce tambem conhece o app do chefe (calculos, clientes e contas de servicos) "
+    "e ajuda com ele quando o assunto vier. "
+    "Quando nao souber algo especifico do app, seja honesta e sugira o proximo passo "
+    "em vez de inventar telas ou botoes. "
+    "Responda curto, util, natural e em pt-BR. Nunca diga que so fala sobre o app."
 )
 
 
@@ -46,8 +50,8 @@ load_env_file()
 
 
 VOICE = os.getenv("LILY_VOICE", "pt-BR-FranciscaNeural")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "groq/compound-mini")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 
 
 def local_reply(message: str) -> str:
@@ -61,14 +65,29 @@ def local_reply(message: str) -> str:
     return "Estou te ouvindo. A ponte de voz ja esta funcionando, chefe."
 
 
+# Termos de busca vao para o Groq: o modelo compound pesquisa na web sozinho,
+# enquanto o Gemini responde so pelo treinamento (google_search bloqueado na chave atual).
+SEARCH_TRIGGERS = (
+    "pesquisa",
+    "pesquisar",
+    "buscar",
+    "busca",
+    "procura",
+    "procurar",
+)
+
+
+def needs_web_search(message: str) -> bool:
+    normalized = message.lower()
+    return any(trigger in normalized for trigger in SEARCH_TRIGGERS)
+
+
 def should_use_gemini(message: str) -> bool:
     normalized = message.lower()
+    if needs_web_search(normalized):
+        return False
+
     complex_triggers = (
-        "pesquisa",
-        "pesquisar",
-        "buscar",
-        "busca",
-        "procura",
         "analisa",
         "analisar",
         "explica",
