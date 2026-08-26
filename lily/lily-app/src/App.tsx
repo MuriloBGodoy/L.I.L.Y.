@@ -29,7 +29,6 @@ import {
 } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { auth, db, isFirebaseConfigured, storage } from "./lib/firebase";
-import { isSupabaseConfigured, supabase } from "./lib/supabase";
 
 type View = "home" | "settings" | "accounts";
 type AccountType = "PF" | "PJ";
@@ -813,7 +812,7 @@ function getPasswordStrength(pass: string) {
   return { label: "Senha Forte", width: "100%", color: "#00ced1" };
 }
 
-function mapSupabaseAccount(row: Record<string, unknown>): LilyAccount {
+function mapAccountRow(row: Record<string, unknown>): LilyAccount {
   const total = Number(row.total ?? 0);
   return {
     id: Number(row.id ?? Date.now()),
@@ -841,56 +840,8 @@ function mapFirebaseAccount(
   row: Record<string, unknown>,
 ): LilyAccount {
   return {
-    ...mapSupabaseAccount(row),
+    ...mapAccountRow(row),
     docId,
-  };
-}
-
-function mapPostgresAccount(row: Record<string, unknown>): LilyAccount {
-  return {
-    id: Number(row.id ?? Date.now()),
-    user_id: String(row.firebase_uid ?? ""),
-    marca: String(row.brand ?? ""),
-    veiculo: String(row.vehicle ?? ""),
-    tipoPeca: String(row.piece_type ?? ""),
-    clienteNome: String(row.client_name ?? ""),
-    data: String(row.created_at ?? new Date().toISOString()),
-    modo: Boolean(row.mode_blue),
-    vInicial: String(row.initial_value ?? ""),
-    frete: String(row.freight ?? ""),
-    func: String(row.employee_cost ?? ""),
-    material: String(row.material ?? ""),
-    horas: String(row.service_hours ?? ""),
-    inss: String(row.inss ?? ""),
-    vendidoPor: String(row.sold_for ?? ""),
-    maoDeObra: String(row.labor ?? ""),
-    total: Number(row.total ?? 0),
-  };
-}
-
-function accountToPostgresPayload(
-  payload: Record<string, unknown>,
-  firebaseUid: string,
-) {
-  return {
-    id: Number(payload.id ?? Date.now()),
-    firebase_uid: firebaseUid,
-    brand: String(payload.marca ?? ""),
-    vehicle: String(payload.veiculo ?? ""),
-    piece_type: String(payload.tipo_peca ?? ""),
-    client_name: String(payload.cliente_nome ?? ""),
-    created_at: String(payload.data ?? new Date().toISOString()),
-    mode_blue: Boolean(payload.modo),
-    initial_value: String(payload.vinicial ?? ""),
-    freight: String(payload.frete ?? ""),
-    employee_cost: String(payload.func ?? ""),
-    material: String(payload.material ?? ""),
-    service_hours: String(payload.horas ?? ""),
-    inss: String(payload.inss ?? ""),
-    sold_for: String(payload.vendido_por ?? ""),
-    labor: String(payload.mao_de_obra ?? ""),
-    total: Number(payload.total ?? 0),
-    updated_at: new Date().toISOString(),
   };
 }
 
@@ -1277,28 +1228,6 @@ function App() {
           }
         }
 
-        if (isSupabaseConfigured && supabase) {
-          const { data } = await supabase
-            .from("user_profiles")
-            .select("*")
-            .eq("firebase_uid", currentUser.uid)
-            .maybeSingle();
-
-          if (data) {
-            nextUserData = {
-              nome: String(data.name ?? nextUserData.nome),
-              user: String(data.username ?? nextUserData.user),
-              email: String(data.email ?? nextUserData.email),
-              phone: String(data.phone ?? nextUserData.phone ?? ""),
-              doc: String(data.document ?? nextUserData.doc ?? ""),
-              type: (String(data.account_type ?? nextUserData.type ?? "PF") === "PJ"
-                ? "PJ"
-                : "PF") as AccountType,
-              photoURL: String(data.photo_url ?? nextUserData.photoURL ?? ""),
-            };
-          }
-        }
-
         setUserData(nextUserData);
         await loadAccounts(currentUser);
       } else if (!isSessionMarkedActive) {
@@ -1335,21 +1264,6 @@ function App() {
 
   async function loadAccounts(targetUser?: User | null) {
     const currentUser = targetUser ?? user;
-
-    if (isSupabaseConfigured && supabase && currentUser) {
-      const { data, error } = await supabase
-        .from("accounts")
-        .select("*")
-        .eq("firebase_uid", currentUser.uid)
-        .order("created_at", { ascending: false });
-
-      if (!error && data) {
-        setAccounts(data.map((row) => mapPostgresAccount(row)));
-        return;
-      }
-
-      notify(`${t("alertSaveError")}: ${error?.message ?? "Supabase"}`, "error");
-    }
 
     if (!isFirebaseConfigured || !db) {
       setAccounts(readStorage<LilyAccount[]>("contas", []));
@@ -1867,24 +1781,6 @@ function App() {
         type: accountType,
         createdAt: serverTimestamp(),
       });
-
-      if (isSupabaseConfigured && supabase) {
-        const { error } = await supabase.from("user_profiles").upsert({
-          firebase_uid: credential.user.uid,
-          name: registerForm.nome,
-          username: registerForm.user,
-          email: registerForm.email,
-          phone: registerForm.phone,
-          document: registerForm.doc,
-          account_type: accountType,
-          photo_url: "",
-          updated_at: new Date().toISOString(),
-        });
-
-        if (error) {
-          throw new Error(error.message);
-        }
-      }
     } catch (error) {
       const message =
         error instanceof Error ? error.message : t("alertRegisterError");
@@ -1934,26 +1830,16 @@ function App() {
       const userRef = doc(db, "users", credential.user.uid);
       const userSnapshot = await getDoc(userRef);
       const userDoc = userSnapshot.exists() ? userSnapshot.data() : {};
-      let postgresProfile: Record<string, unknown> | null = null;
-
-      if (isSupabaseConfigured && supabase) {
-        const { data } = await supabase
-          .from("user_profiles")
-          .select("*")
-          .eq("firebase_uid", credential.user.uid)
-          .maybeSingle();
-        postgresProfile = data as Record<string, unknown> | null;
-      }
 
       setUser(credential.user);
       setUserData({
-        nome: String(postgresProfile?.name ?? userDoc.nome ?? credential.user.displayName ?? credential.user.email ?? t("userMenuAccount")),
-        user: String(postgresProfile?.username ?? userDoc.user ?? credential.user.email?.split("@")[0] ?? "usuario"),
-        email: String(postgresProfile?.email ?? credential.user.email ?? ""),
-        phone: String(postgresProfile?.phone ?? userDoc.phone ?? ""),
-        doc: String(postgresProfile?.document ?? userDoc.doc ?? ""),
-        type: (String(postgresProfile?.account_type ?? userDoc.type ?? "PF") === "PJ" ? "PJ" : "PF") as AccountType,
-        photoURL: String(postgresProfile?.photo_url ?? userDoc.photoURL ?? credential.user.photoURL ?? ""),
+        nome: String(userDoc.nome ?? credential.user.displayName ?? credential.user.email ?? t("userMenuAccount")),
+        user: String(userDoc.user ?? credential.user.email?.split("@")[0] ?? "usuario"),
+        email: String(credential.user.email ?? ""),
+        phone: String(userDoc.phone ?? ""),
+        doc: String(userDoc.doc ?? ""),
+        type: (String(userDoc.type ?? "PF") === "PJ" ? "PJ" : "PF") as AccountType,
+        photoURL: String(userDoc.photoURL ?? credential.user.photoURL ?? ""),
       });
       setAuthVisible(false);
       setLoginEmail("");
@@ -2101,24 +1987,6 @@ function App() {
         );
       }
 
-      if (isSupabaseConfigured && supabase && user) {
-        const { error } = await supabase.from("user_profiles").upsert({
-          firebase_uid: user.uid,
-          name: nextUserData.nome,
-          username: nextUserData.user,
-          email: nextUserData.email,
-          phone: nextUserData.phone,
-          document: nextUserData.doc,
-          account_type: nextUserData.type,
-          photo_url: nextUserData.photoURL,
-          updated_at: new Date().toISOString(),
-        });
-
-        if (error) {
-          throw new Error(error.message);
-        }
-      }
-
       setUserData(nextUserData);
       setProfilePhotoFile(null);
       setProfileModalOpen(false);
@@ -2163,28 +2031,16 @@ function App() {
     if (!window.confirm(t("alertDeleteConfirm"))) return;
 
     const current = accounts.find((item) => item.id === id);
-    if (isSupabaseConfigured && supabase && user) {
-      const { error } = await supabase
-        .from("accounts")
-        .delete()
-        .eq("firebase_uid", user.uid)
-        .eq("id", id);
-
-      if (error) {
-        notify(`${t("alertDeleteError")}: ${error.message}`, "error");
+    if (isFirebaseConfigured && db && current?.docId) {
+      try {
+        await deleteDoc(doc(db, "accounts", current.docId));
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : t("alertDeleteError");
+        notify(`${t("alertDeleteError")}: ${message}`, "error");
         return;
       }
-    } else
-      if (isFirebaseConfigured && db && current?.docId) {
-        try {
-          await deleteDoc(doc(db, "accounts", current.docId));
-        } catch (error) {
-          const message =
-            error instanceof Error ? error.message : t("alertDeleteError");
-          notify(`${t("alertDeleteError")}: ${message}`, "error");
-          return;
-        }
-      }
+    }
 
     setAccounts((prev) => prev.filter((item) => item.id !== id));
     if (selectedAccountId === id) {
@@ -2239,26 +2095,12 @@ function App() {
 
     let mapped: LilyAccount;
 
-    if (isSupabaseConfigured && supabase && user) {
-      const postgresPayload = accountToPostgresPayload(payload, user.uid);
-      const { data, error } = await supabase
-        .from("accounts")
-        .upsert(postgresPayload)
-        .select()
-        .single();
-
-      if (error) {
-        notify(`${t("alertSaveError")}: ${error.message}`, "error");
-        return;
-      }
-
-      mapped = mapPostgresAccount(data as Record<string, unknown>);
-    } else if (isFirebaseConfigured && db) {
+    if (isFirebaseConfigured && db) {
       try {
         if (existingAccount?.docId) {
           await updateDoc(doc(db, "accounts", existingAccount.docId), payload);
           mapped = {
-            ...mapSupabaseAccount(payload as unknown as Record<string, unknown>),
+            ...mapAccountRow(payload as unknown as Record<string, unknown>),
             docId: existingAccount.docId,
           };
         } else {
@@ -2267,7 +2109,7 @@ function App() {
             createdAt: serverTimestamp(),
           });
           mapped = {
-            ...mapSupabaseAccount(payload as unknown as Record<string, unknown>),
+            ...mapAccountRow(payload as unknown as Record<string, unknown>),
             docId: created.id,
           };
         }
@@ -2278,7 +2120,7 @@ function App() {
         return;
       }
     } else {
-      mapped = mapSupabaseAccount(payload as unknown as Record<string, unknown>);
+      mapped = mapAccountRow(payload as unknown as Record<string, unknown>);
     }
 
     setAccounts((prev) =>
