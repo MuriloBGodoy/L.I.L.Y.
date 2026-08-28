@@ -1,11 +1,4 @@
-import {
-  type CSSProperties,
-  type ReactNode,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   createUserWithEmailAndPassword,
@@ -95,24 +88,10 @@ type Client = {
   ie?: string;
 };
 
-/**
- * Intensidade da pele HUD ("JARVIS") da home.
- * j1 Visor  — discreta: 1 anel, faixa de status, chanfro na gaveta.
- * j2 Nucleo — padrao: 3 aneis (o externo mede a margem), grade, scanlines.
- * j3 Hangar — cinematografica: reticulo, telemetria estendida, boot.
- *
- * ATENCAO: isto e ESTETICA e nada mais. Nao confundir com `isBlueMode`, que e
- * regra de negocio (troca a formula do calculo, revela campos e filtra contas).
- * As duas coisas sao ortogonais de proposito.
- */
-type HudLevel = "j1" | "j2" | "j3";
-
 type Config = {
   valorHora: number;
   pecas: string[];
   clientes: Client[];
-  /** Opcional: configs gravadas antes desta versao nao tem a chave. */
-  hudLevel?: HudLevel;
 };
 
 type LilyAccount = {
@@ -236,10 +215,7 @@ const defaultConfig: Config = {
   valorHora: 40,
   pecas: ["Radiador", "Caixa", "Intercooler", "Condensador"],
   clientes: [],
-  hudLevel: "j2",
 };
-
-const hudLevels: HudLevel[] = ["j1", "j2", "j3"];
 
 const defaultAccountForm: AccountForm = {
   marca: "",
@@ -340,7 +316,6 @@ const translations = {
       "Não foi possível sincronizar a foto agora. Os outros dados serão salvos.",
     lilyAssistantTitle: "L.I.L.Y Assistente",
     lilyAssistantSubtitle: "Ative a voz no app desktop ou converse comigo por mensagem.",
-    lilyVoice: "Voz",
     lilyVoiceIdle: "Desativada",
     lilyVoiceStarting: "Iniciando...",
     lilyVoiceActive: "Ativa",
@@ -361,6 +336,15 @@ const translations = {
     lilyCoreLabel: "Núcleo neural",
     lilyCoreHint: "Clique no núcleo para escolher voz ou mensagem.",
     lilyChooseMode: "Escolha como conversar",
+    // Bloco do núcleo: saudação, pergunta e os quatro atalhos.
+    coreGreetMorning: "Bom dia",
+    coreGreetAfternoon: "Boa tarde",
+    coreGreetEvening: "Boa noite",
+    coreAsk: "No que a gente trabalha agora?",
+    coreChipCalc: "Calcular um serviço",
+    coreChipNewAccount: "Nova conta",
+    coreChipAccounts: "Ver contas cadastradas",
+    coreChipVoice: "Falar por voz",
     lilyVoiceMode: "Chat de voz",
     lilyMessageMode: "Chat mensagem",
     lilyChat: "Chat",
@@ -424,32 +408,6 @@ const translations = {
     viewAccounts: "Visualizar Contas Cadastradas",
     piece: "Peça",
     ourStock: "Estoque Nosso",
-    hudAccountMode: "Modo de cálculo",
-    hudModeYellow: "Conta amarela",
-    hudModeBlue: "Conta azul",
-    hudStripCore: "L.I.L.Y online",
-    hudStripEngine: "Motor",
-    hudEngineOnline: "ouvindo",
-    hudEngineIdle: "em espera",
-    hudEngineOffline: "fora do ar",
-    hudMargin: "margem",
-    hudNoData: "sem cálculo",
-    hudIntensity: "HUD",
-    hudLevelVisor: "Visor",
-    hudLevelCore: "Núcleo",
-    hudLevelHangar: "Hangar",
-    coreGreetMorning: "Bom dia",
-    coreGreetAfternoon: "Boa tarde",
-    coreGreetEvening: "Boa noite",
-    coreAsk: "No que a gente trabalha agora?",
-    coreChipCalc: "Calcular um serviço",
-    coreChipNewAccount: "Nova conta",
-    coreChipAccounts: "Ver contas cadastradas",
-    coreChipVoice: "Falar por voz",
-    coreDockTitle: "Cálculo do serviço",
-    coreDockOpen: "abrir",
-    coreDockClose: "fechar",
-    coreDockNoAccount: "sem conta aberta",
     initialValue: "Valor Inicial (R$)",
     freight: "Frete (R$)",
     employee: "Funcionário (R$)",
@@ -594,7 +552,6 @@ const translations = {
       "Could not sync the photo now. The other data will be saved.",
     lilyAssistantTitle: "L.I.L.Y Assistant",
     lilyAssistantSubtitle: "Enable voice in the desktop app or chat with me by message.",
-    lilyVoice: "Voice",
     lilyVoiceIdle: "Disabled",
     lilyVoiceStarting: "Starting...",
     lilyVoiceActive: "Active",
@@ -615,6 +572,14 @@ const translations = {
     lilyCoreLabel: "Neural core",
     lilyCoreHint: "Click the core to choose voice or message.",
     lilyChooseMode: "Choose how to talk",
+    coreGreetMorning: "Good morning",
+    coreGreetAfternoon: "Good afternoon",
+    coreGreetEvening: "Good evening",
+    coreAsk: "What are we working on?",
+    coreChipCalc: "Calculate a service",
+    coreChipNewAccount: "New account",
+    coreChipAccounts: "See saved accounts",
+    coreChipVoice: "Talk by voice",
     lilyVoiceMode: "Voice chat",
     lilyMessageMode: "Message chat",
     lilyChat: "Chat",
@@ -678,32 +643,6 @@ const translations = {
     viewAccounts: "View Registered Accounts",
     piece: "Part",
     ourStock: "Our Stock",
-    hudAccountMode: "Calculation mode",
-    hudModeYellow: "Yellow account",
-    hudModeBlue: "Blue account",
-    hudStripCore: "L.I.L.Y online",
-    hudStripEngine: "Engine",
-    hudEngineOnline: "listening",
-    hudEngineIdle: "standby",
-    hudEngineOffline: "offline",
-    hudMargin: "margin",
-    hudNoData: "no calculation",
-    hudIntensity: "HUD",
-    hudLevelVisor: "Visor",
-    hudLevelCore: "Core",
-    hudLevelHangar: "Hangar",
-    coreGreetMorning: "Good morning",
-    coreGreetAfternoon: "Good afternoon",
-    coreGreetEvening: "Good evening",
-    coreAsk: "What are we working on?",
-    coreChipCalc: "Calculate a service",
-    coreChipNewAccount: "New account",
-    coreChipAccounts: "See saved accounts",
-    coreChipVoice: "Talk by voice",
-    coreDockTitle: "Service calculation",
-    coreDockOpen: "open",
-    coreDockClose: "close",
-    coreDockNoAccount: "no account open",
     initialValue: "Initial Value (R$)",
     freight: "Freight (R$)",
     employee: "Employee (R$)",
@@ -1088,14 +1027,6 @@ function App() {
   );
   const [mainInputs, setMainInputs] = useState<MainInputs>(defaultMainInputs);
   const [results, setResults] = useState<Results | null>(null);
-  /**
-   * A gaveta da Direcao C. Nao nasce aberta: ela ABRE sozinha assim que existe
-   * conta em andamento (ver o efeito mais abaixo). Fechada de proposito quando
-   * a tela esta limpa — e o palco que manda, nao a calculadora.
-   */
-  const [dockOpen, setDockOpen] = useState(false);
-  /** Pedido pendente de foco no primeiro campo, consumido depois do commit. */
-  const dockFocusPendingRef = useRef(false);
   const [accountModalOpen, setAccountModalOpen] = useState(false);
   const [accountForm, setAccountForm] = useState<AccountForm>(defaultAccountForm);
   const [accountImagePreview, setAccountImagePreview] = useState("");
@@ -1163,43 +1094,14 @@ function App() {
     stopping: t("lilyVoiceStopping"),
     error: t("lilyVoiceError"),
   }[lilyVoiceStatus];
-  const hudLevel: HudLevel = config.hudLevel ?? "j2";
-  /** Motor de voz na 8765: ausencia dele e estado previsto, nao travamento. */
-  const engineOnline = lilyVoiceStatus === "active";
-  const engineLabel =
-    lilyVoiceStatus === "error"
-      ? t("hudEngineOffline")
-      : engineOnline
-        ? t("hudEngineOnline")
-        : t("hudEngineIdle");
-  /**
-   * Margem = lucro / venda. Unico numero do HUD que nao existia no app antes,
-   * e o anel externo do nucleo o desenha. Sem calculo, o anel fica vazio.
-   */
-  const hudMargin =
-    results && results.venda > 0 ? (results.lucro / results.venda) * 100 : null;
-  const hudMarginLabel =
-    hudMargin === null
-      ? "--"
-      : `${hudMargin.toLocaleString("pt-BR", {
-          minimumFractionDigits: 1,
-          maximumFractionDigits: 1,
-        })}%`;
-  /**
-   * "Conta em andamento" = o que faz a gaveta nascer aberta. Tres origens:
-   * conta escolhida na sidebar, resultado ja calculado, ou campo digitado.
-   */
-  const hasWorkInProgress =
-    selectedAccountId !== null ||
-    results !== null ||
-    Object.values(mainInputs).some((value) => value.trim() !== "");
+  /** Saudação por faixa do dia. Só o rótulo; o nome entra depois. */
   const greetingKey = (() => {
     const hour = new Date().getHours();
     if (hour < 12) return "coreGreetMorning" as const;
     if (hour < 18) return "coreGreetAfternoon" as const;
     return "coreGreetEvening" as const;
   })();
-  /** Primeiro nome. Se o login for so e-mail, corta no @ em vez de gritar. */
+  /** Primeiro nome. Se o login for só e-mail, corta no @ em vez de gritar. */
   const firstName = (displayName.includes("@")
     ? displayName.split("@")[0]
     : displayName
@@ -1231,25 +1133,6 @@ function App() {
       setToasts((prev) => prev.filter((toast) => toast.id !== id));
     }, 4200);
   }
-
-  /**
-   * "Aberta por padrao quando ja existe conta em andamento" (Direcao C).
-   * So ABRE — nunca fecha sozinha: fechar a gaveta debaixo da mao de quem
-   * acabou de apagar os campos seria arrancar a tela do usuario.
-   */
-  useEffect(() => {
-    if (hasWorkInProgress) setDockOpen(true);
-  }, [hasWorkInProgress]);
-
-  /**
-   * O foco tem que esperar o commit: enquanto a gaveta esta fechada o corpo
-   * dela vai com `hidden`, e elemento escondido nao aceita foco.
-   */
-  useEffect(() => {
-    if (!dockOpen || !dockFocusPendingRef.current) return;
-    dockFocusPendingRef.current = false;
-    document.getElementById("vInicial")?.focus();
-  }, [dockOpen]);
 
   useEffect(() => {
     localStorage.setItem("configLily", JSON.stringify(config));
@@ -1430,20 +1313,6 @@ function App() {
         mapFirebaseAccount(accountDoc.id, accountDoc.data() as Record<string, unknown>),
       ),
     );
-  }
-
-  /**
-   * Chip "Calcular um servico": abre a gaveta e ja poe o cursor no primeiro
-   * campo. Se ela ja estava aberta, o efeito nao roda de novo — entao o foco
-   * vai aqui mesmo.
-   */
-  function handleOpenCalcDock() {
-    if (dockOpen) {
-      document.getElementById("vInicial")?.focus();
-      return;
-    }
-    dockFocusPendingRef.current = true;
-    setDockOpen(true);
   }
 
   function handleCalculate() {
@@ -2368,44 +2237,11 @@ function App() {
   });
 
   const selectedAccount = accounts.find((account) => account.id === selectedAccountId);
-  /**
-   * Etiqueta da gaveta: a conta aberta, ou o aviso de que nao ha nenhuma.
-   * A marca so entra quando ela ja nao esta dentro do nome do veiculo — senao
-   * a etiqueta sai "Scania P360 · Scania", que foi o que apareceu no teste.
-   */
-  const dockTag =
-    [
-      selectedAccount?.veiculo,
-      selectedAccount?.marca &&
-      !selectedAccount.veiculo
-        ?.toLowerCase()
-        .includes(selectedAccount.marca.toLowerCase())
-        ? selectedAccount.marca
-        : "",
-    ]
-      .filter(Boolean)
-      .join(" · ") || t("coreDockNoAccount");
-  /** Linhas que a linha-resumo da gaveta nao cobre. Sem elas, sem telemetria. */
-  const hasExtraResultRows = Boolean(
-    selectedAccount?.vendidoPor ||
-      selectedAccount?.maoDeObra ||
-      (isBlueMode && results?.montagem !== undefined),
-  );
   const accountModalTitle = selectedAccount ? t("editAccount") : t("registerAccount");
   const accountSaveLabel = selectedAccount ? t("update") : t("confirm");
 
   return (
-    /*
-     * `azul` = NEGOCIO (formula do calculo, campos, filtro de contas).
-     * `hud` + `hud-jN` = ESTETICA. Trocar a intensidade e trocar esta classe;
-     * toda a pele esta escrita em var(--primary) / var(--lily-glow-rgb), entao
-     * ela nasce funcionando nos dois primaries sem uma linha a mais.
-     */
-    <div
-      className={["app-shell", isBlueMode ? "azul" : "", "hud", `hud-${hudLevel}`]
-        .filter(Boolean)
-        .join(" ")}
-    >
+    <div className={isBlueMode ? "app-shell azul" : "app-shell"}>
       <Toasts messages={toasts} />
 
       <div className="legacy-user-menu" style={{ display: "none" }}>
@@ -3122,84 +2958,32 @@ function App() {
       {view === "home" && (
         <>
           <header>
-            <div className="hud-brand">
-              <h1>L.I.L.Y</h1>
-              <p>{t("appSubtitle")}</p>
-            </div>
-
+            <h1>L.I.L.Y</h1>
+            <p>{t("appSubtitle")}</p>
+            <label className="switch">
+              <input
+                type="checkbox"
+                checked={isBlueMode}
+                onChange={(event) => {
+                  setIsBlueMode(event.target.checked);
+                  setSelectedAccountId(null);
+                  setResults(null);
+                }}
+              />
+              <span className="slider" />
+            </label>
           </header>
 
-          <div className="hud-strip">
-            <span className={engineOnline ? "hud-live is-on" : "hud-live"}>
-              {t("hudStripCore")}
-            </span>
-            <span className="hud-strip-item">
-              {t("hudStripEngine")} <b>8765</b> {engineLabel}
-            </span>
-
-            {/* O antigo toggle sem rotulo. Mesma variavel e mesmo efeito
-                colateral (limpa conta selecionada e resultado) — so que agora
-                diz o que faz. Mora aqui e nao no <header> porque .hamburger e
-                .user-menu sao position:fixed e passam por cima dele. */}
-            <div className="hud-seg" role="group" aria-label={t("hudAccountMode")}>
-              <span className="hud-strip-item">{t("hudAccountMode")}</span>
-              <div className="hud-seg-track">
-                {[false, true].map((mode) => (
-                  <button
-                    key={String(mode)}
-                    type="button"
-                    className={mode === isBlueMode ? "is-on" : ""}
-                    aria-pressed={mode === isBlueMode}
-                    onClick={() => {
-                      if (mode === isBlueMode) return;
-                      setIsBlueMode(mode);
-                      setSelectedAccountId(null);
-                      setResults(null);
-                    }}
-                  >
-                    {mode ? t("hudModeBlue") : t("hudModeYellow")}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Seletor de intensidade. Estetica pura: so troca a classe do
-                shell e persiste em config.hudLevel. */}
-            <div className="hud-seg hud-levels" role="group" aria-label={t("hudIntensity")}>
-              <span className="hud-strip-item">{t("hudIntensity")}</span>
-              <div className="hud-seg-track">
-                {hudLevels.map((level) => (
-                  <button
-                    key={level}
-                    type="button"
-                    className={level === hudLevel ? "is-on" : ""}
-                    aria-pressed={level === hudLevel}
-                    onClick={() =>
-                      setConfig((prev) => ({ ...prev, hudLevel: level }))
-                    }
-                  >
-                    {level === "j1"
-                      ? t("hudLevelVisor")
-                      : level === "j2"
-                        ? t("hudLevelCore")
-                        : t("hudLevelHangar")}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/*
-           * PALCO (Direcao C). O nucleo NAO mora dentro de um card: ele e a
-           * fonte de luz da tela. Saudacao + pergunta + chips ficam sob ele, e
-           * a calculadora vive na gaveta la embaixo. A pele JARVIS (grade,
-           * scanlines, mono, chanfro) veste esta estrutura — nao a substitui.
-           */}
-          <main
-            className={dockOpen ? "core-stage is-dock-open" : "core-stage"}
-          >
-            <div className="core-center">
-              <div className="core-orbit">
+          <main>
+            <section
+              className={
+                lilyAssistantOpen
+                  ? "lily-assistant-panel is-open"
+                  : "lily-assistant-panel"
+              }
+              aria-label={t("lilyAssistantTitle")}
+            >
+              <div className="lily-orbit-stage">
                 <button
                   type="button"
                   className={lilyCoreStateClass}
@@ -3215,84 +2999,78 @@ function App() {
                   <span className="lily-core-nodes" />
                   <span className="lily-core-scan" />
                   <span className="lily-core-pulse" />
-                  {/* Camadas do HUD. Invisiveis fora de .app-shell.hud. */}
-                  <span className="hud-ticks" />
-                  <span className="hud-ticks-q" />
-                  <span
-                    className="hud-gauge"
-                    style={
-                      {
-                        "--hud-p": hudMargin === null ? 0 : hudMargin.toFixed(1),
-                      } as CSSProperties
+                </button>
+
+                {/*
+                 * Saudação + pergunta + chips: o bloco que sobreviveu do
+                 * redesign. Ocupa o lugar do antigo .lily-core-copy, que dizia
+                 * a mesma coisa de forma mais fria e brigava com o núcleo
+                 * maior por espaço no canto do palco.
+                 */}
+                <p className="core-greet">
+                  {greetingLine}
+                  <span className="core-greet-brand"> · {t("appSubtitle")}</span>
+                </p>
+                <h2 className="core-ask">{t("coreAsk")}</h2>
+
+                <div className="core-chips">
+                  <button
+                    type="button"
+                    className="core-chip is-hot"
+                    onClick={() => {
+                      // A calculadora nunca saiu da tela: o chip só leva o
+                      // cursor até o primeiro campo dela.
+                      const alvo = document.getElementById("vInicial");
+                      alvo?.scrollIntoView({ block: "center" });
+                      alvo?.focus();
+                    }}
+                  >
+                    {t("coreChipCalc")}
+                  </button>
+                  <button
+                    type="button"
+                    className="core-chip"
+                    onClick={handleNewAccount}
+                  >
+                    {t("coreChipNewAccount")}
+                  </button>
+                  <button
+                    type="button"
+                    className="core-chip"
+                    onClick={() => setView("accounts")}
+                  >
+                    {t("coreChipAccounts")}
+                  </button>
+                  <button
+                    type="button"
+                    className={
+                      lilyAssistantOpen && lilyAssistantMode === "voice"
+                        ? "core-chip is-on"
+                        : "core-chip"
                     }
-                  />
-                  <span className="hud-brackets" />
-                </button>
-
-                <div className="hud-read" aria-live="polite">
-                  <strong>{hudMarginLabel}</strong>
-                  <span>{hudMargin === null ? t("hudNoData") : t("hudMargin")}</span>
+                    onClick={() => {
+                      setLilyAssistantMode("voice");
+                      setLilyAssistantOpen(true);
+                    }}
+                  >
+                    {t("coreChipVoice")}
+                  </button>
                 </div>
-              </div>
 
-              <p className="core-greet">
-                {greetingLine}
-                <span className="core-greet-brand"> · {t("appSubtitle")}</span>
-              </p>
-              <h2 className="core-ask">{t("coreAsk")}</h2>
-
-              <div className="core-chips">
-                <button
-                  type="button"
-                  className="core-chip is-hot"
-                  onClick={handleOpenCalcDock}
-                >
-                  {t("coreChipCalc")}
-                </button>
-                <button
-                  type="button"
-                  className="core-chip"
-                  onClick={() => {
-                    handleNewAccount();
-                    handleOpenCalcDock();
-                  }}
-                >
-                  {t("coreChipNewAccount")}
-                </button>
-                <button
-                  type="button"
-                  className="core-chip"
-                  onClick={() => setView("accounts")}
-                >
-                  {t("coreChipAccounts")}
-                </button>
-                <button
-                  type="button"
-                  className={
-                    lilyAssistantOpen && lilyAssistantMode === "voice"
-                      ? "core-chip is-on"
-                      : "core-chip"
-                  }
-                  onClick={() => {
-                    setLilyAssistantMode("voice");
-                    setLilyAssistantOpen(true);
-                  }}
-                >
-                  {t("coreChipVoice")}
-                </button>
-              </div>
-            </div>
-
-            {/* O assistente sobe sobre o palco, so quando chamado. */}
-            {lilyAssistantOpen && (
-              <section className="core-assistant" aria-label={t("lilyAssistantTitle")}>
+                {/* Os dois cards de chat. Ficam sempre visíveis, como na foto;
+                    clicar em um escolhe o modo e já abre o console dele. */}
                 <div className="lily-mode-satellites" aria-label={t("lilyChooseMode")}>
                   <button
                     type="button"
                     className={
-                      lilyAssistantMode === "voice" ? "lily-mini is-active" : "lily-mini"
+                      lilyAssistantOpen && lilyAssistantMode === "voice"
+                        ? "lily-mini is-active"
+                        : "lily-mini"
                     }
-                    onClick={() => setLilyAssistantMode("voice")}
+                    onClick={() => {
+                      setLilyAssistantMode("voice");
+                      setLilyAssistantOpen(true);
+                    }}
                   >
                     <span className="lily-mini-orb">V</span>
                     <strong>{t("lilyVoiceMode")}</strong>
@@ -3300,257 +3078,204 @@ function App() {
                   <button
                     type="button"
                     className={
-                      lilyAssistantMode === "chat" ? "lily-mini is-active" : "lily-mini"
+                      lilyAssistantOpen && lilyAssistantMode === "chat"
+                        ? "lily-mini is-active"
+                        : "lily-mini"
                     }
-                    onClick={() => setLilyAssistantMode("chat")}
+                    onClick={() => {
+                      setLilyAssistantMode("chat");
+                      setLilyAssistantOpen(true);
+                    }}
                   >
                     <span className="lily-mini-orb">M</span>
                     <strong>{t("lilyMessageMode")}</strong>
                   </button>
                 </div>
+              </div>
 
-                {lilyAssistantMode === "voice" && (
-                  <div className="lily-voice-console">
-                    <div>
-                      <span className="lily-kicker">{t("lilyVoiceMode")}</span>
-                      <h3>{lilyVoiceLabel}</h3>
-                      <p>
-                        {isTauriRuntime
-                          ? t("lilyVoiceHintActive")
-                          : t("lilyVoiceWebHint")}
-                      </p>
-                    </div>
+              {lilyAssistantOpen && lilyAssistantMode === "voice" && (
+                <div className="lily-voice-console">
+                  <div>
+                    <span className="lily-kicker">{t("lilyVoiceMode")}</span>
+                    <h3>{lilyVoiceLabel}</h3>
+                    <p>
+                      {isTauriRuntime
+                        ? t("lilyVoiceHintActive")
+                        : t("lilyVoiceWebHint")}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className={
+                      lilyVoiceStatus === "active"
+                        ? "button-muted"
+                        : "lily-primary-action"
+                    }
+                    disabled={
+                      lilyVoiceStatus === "starting" || lilyVoiceStatus === "stopping"
+                    }
+                    onClick={() => void handleToggleLilyVoice()}
+                  >
+                    {lilyVoiceStatus === "active"
+                      ? t("lilyVoiceStop")
+                      : t("lilyVoiceStart")}
+                  </button>
+                </div>
+              )}
+
+              {lilyAssistantOpen && lilyAssistantMode === "chat" && (
+                <div className="lily-chat-card">
+                  <div className="lily-chat-log" aria-live="polite">
+                    {lilyChatMessages.map((message) => (
+                      <div
+                        key={message.id}
+                        className={`lily-chat-message lily-chat-${message.author}`}
+                      >
+                        <span>{message.author === "lily" ? "L.I.L.Y" : displayName}</span>
+                        <p>{message.text}</p>
+                      </div>
+                    ))}
+                    {lilyChatBusy && (
+                      <div className="lily-chat-message lily-chat-lily">
+                        <span>L.I.L.Y</span>
+                        <p>{t("lilyChatThinking")}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="lily-chat-input">
+                    <input
+                      type="text"
+                      value={lilyChatInput}
+                      placeholder={t("lilyChatPlaceholder")}
+                      onChange={(event) => setLilyChatInput(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          void handleSendLilyChat();
+                        }
+                      }}
+                    />
                     <button
                       type="button"
-                      className={
-                        lilyVoiceStatus === "active"
-                          ? "button-muted"
-                          : "lily-primary-action"
-                      }
-                      disabled={
-                        lilyVoiceStatus === "starting" || lilyVoiceStatus === "stopping"
-                      }
-                      onClick={() => void handleToggleLilyVoice()}
+                      disabled={lilyChatBusy || !lilyChatInput.trim()}
+                      onClick={() => void handleSendLilyChat()}
                     >
-                      {lilyVoiceStatus === "active"
-                        ? t("lilyVoiceStop")
-                        : t("lilyVoiceStart")}
-                    </button>
-                  </div>
-                )}
-
-                {lilyAssistantMode === "chat" && (
-                  <div className="lily-chat-card">
-                    <div className="lily-chat-log" aria-live="polite">
-                      {lilyChatMessages.map((message) => (
-                        <div
-                          key={message.id}
-                          className={`lily-chat-message lily-chat-${message.author}`}
-                        >
-                          <span>
-                            {message.author === "lily" ? "L.I.L.Y" : displayName}
-                          </span>
-                          <p>{message.text}</p>
-                        </div>
-                      ))}
-                      {lilyChatBusy && (
-                        <div className="lily-chat-message lily-chat-lily">
-                          <span>L.I.L.Y</span>
-                          <p>{t("lilyChatThinking")}</p>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="lily-chat-input">
-                      <input
-                        type="text"
-                        value={lilyChatInput}
-                        placeholder={t("lilyChatPlaceholder")}
-                        onChange={(event) => setLilyChatInput(event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            event.preventDefault();
-                            void handleSendLilyChat();
-                          }
-                        }}
-                      />
-                      <button
-                        type="button"
-                        disabled={lilyChatBusy || !lilyChatInput.trim()}
-                        onClick={() => void handleSendLilyChat()}
-                      >
-                        {t("lilyChatSend")}
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </section>
-            )}
-
-            {/*
-             * A GAVETA. Aberta por padrao quando ja existe conta em andamento
-             * (conta selecionada, resultado na tela ou campo preenchido) — e o
-             * estado central da Direcao C. Fechada, sobra a alca: um clique
-             * para calcular, o custo que ele aceitou ao escolher a C.
-             */}
-            <section
-              className={dockOpen ? "core-dock is-open" : "core-dock"}
-              aria-label={t("coreDockTitle")}
-            >
-              <h2 className="core-dock-head">
-                <button
-                  type="button"
-                  className="core-dock-toggle"
-                  aria-expanded={dockOpen}
-                  aria-controls="core-dock-body"
-                  onClick={() => setDockOpen((prev) => !prev)}
-                >
-                  <span className="core-grab" aria-hidden="true" />
-                  <span className="core-dock-title">{t("coreDockTitle")}</span>
-                  <span className="core-dock-tag">{dockTag}</span>
-                  <span className="core-dock-hint">
-                    {dockOpen ? t("coreDockClose") : t("coreDockOpen")}
-                  </span>
-                </button>
-              </h2>
-
-              <div className="core-dock-body" id="core-dock-body" hidden={!dockOpen}>
-                <div className="inputs">
-                  <FloatingInput
-                    id="vInicial"
-                    label={t("initialValue")}
-                    value={mainInputs.vInicial}
-                    onChange={(value) =>
-                      setMainInputs((prev) => ({ ...prev, vInicial: value }))
-                    }
-                  />
-                  <FloatingInput
-                    id="frete"
-                    label={t("freight")}
-                    value={mainInputs.frete}
-                    onChange={(value) =>
-                      setMainInputs((prev) => ({ ...prev, frete: value }))
-                    }
-                  />
-                  <FloatingInput
-                    id="func"
-                    label={t("employee")}
-                    value={mainInputs.func}
-                    onChange={(value) =>
-                      setMainInputs((prev) => ({ ...prev, func: value }))
-                    }
-                  />
-                  {isBlueMode && (
-                    <>
-                      <FloatingInput
-                        id="material"
-                        label={t("material")}
-                        value={mainInputs.material}
-                        onChange={(value) =>
-                          setMainInputs((prev) => ({ ...prev, material: value }))
-                        }
-                      />
-                      <FloatingInput
-                        id="horas"
-                        label={t("serviceHours")}
-                        value={mainInputs.horas}
-                        onChange={(value) =>
-                          setMainInputs((prev) => ({ ...prev, horas: value }))
-                        }
-                      />
-                      <FloatingInput
-                        id="inss"
-                        label="INSS (R$)"
-                        value={mainInputs.inss}
-                        onChange={(value) =>
-                          setMainInputs((prev) => ({ ...prev, inss: value }))
-                        }
-                      />
-                    </>
-                  )}
-                </div>
-
-                {/* Linha-resumo da C: o lucro grande, venda e custo ao lado, e
-                    as duas acoes que fecham o fluxo. */}
-                <div className="core-sum">
-                  <div className="core-sum-profit">
-                    <span className="k">{t("finalProfit")}</span>
-                    <strong
-                      className={results ? undefined : "is-empty"}
-                      aria-live="polite"
-                    >
-                      {results ? formatCurrency(results.lucro) : "—"}
-                    </strong>
-                  </div>
-                  <dl className="core-sum-side">
-                    <div>
-                      <dt>{t("sellFor")}</dt>
-                      <dd>{results ? formatCurrency(results.venda) : "—"}</dd>
-                    </div>
-                    <div>
-                      <dt>{t("cost")}</dt>
-                      <dd>{results ? formatCurrency(results.custo) : "—"}</dd>
-                    </div>
-                  </dl>
-                  <div className="core-sum-actions">
-                    <button className="core-go" onClick={handleCalculate}>
-                      {t("calculate")}
-                    </button>
-                    <button
-                      className="button-muted"
-                      onClick={() => setAccountModalOpen(true)}
-                    >
-                      {selectedAccount ? t("editAccount") : t("registerAccount")}
+                      {t("lilyChatSend")}
                     </button>
                   </div>
                 </div>
-
-                {/* Telemetria: so o que NAO cabe na linha-resumo. */}
-                {results && hasExtraResultRows && (
-                  <div className="resultado">
-                    <h3>{isBlueMode ? t("blueResult") : t("yellowResult")}</h3>
-                    {selectedAccount?.vendidoPor && (
-                      <ResultRow
-                        label={t("soldFor")}
-                        value={formatCurrency(toNumber(selectedAccount.vendidoPor))}
-                      />
-                    )}
-                    {selectedAccount?.maoDeObra && (
-                      <ResultRow
-                        label={t("labor")}
-                        value={formatCurrency(toNumber(selectedAccount.maoDeObra))}
-                      />
-                    )}
-                    {isBlueMode && results.montagem !== undefined && (
-                      <>
-                        <ResultRow
-                          label={t("assembly")}
-                          value={formatCurrency(results.montagem)}
-                        />
-                        <ResultRow
-                          label={t("coreAssembly")}
-                          value={formatCurrency(results.cm ?? 0)}
-                        />
-                        <ResultRow
-                          label={t("assemblySale")}
-                          value={formatCurrency(results.mv ?? 0)}
-                        />
-                      </>
-                    )}
-                  </div>
-                )}
-
-                {/* Terceiro nivel: manutencao, longe do CALCULAR. */}
-                <div className="core-dock-minor">
-                  <button className="button-muted" onClick={handleNewAccount}>
-                    {t("newAccount")}
-                  </button>
-                  <button id="resetar" onClick={handleReset}>
-                    {t("clear")}
-                  </button>
-                </div>
-              </div>
+              )}
             </section>
+
+            <div className="inputs">
+              <FloatingInput
+                id="vInicial"
+                label={t("initialValue")}
+                value={mainInputs.vInicial}
+                onChange={(value) =>
+                  setMainInputs((prev) => ({ ...prev, vInicial: value }))
+                }
+              />
+              <FloatingInput
+                id="frete"
+                label={t("freight")}
+                value={mainInputs.frete}
+                onChange={(value) =>
+                  setMainInputs((prev) => ({ ...prev, frete: value }))
+                }
+              />
+              <FloatingInput
+                id="func"
+                label={t("employee")}
+                value={mainInputs.func}
+                onChange={(value) =>
+                  setMainInputs((prev) => ({ ...prev, func: value }))
+                }
+              />
+              {isBlueMode && (
+                <>
+                  <FloatingInput
+                    id="material"
+                    label={t("material")}
+                    value={mainInputs.material}
+                    onChange={(value) =>
+                      setMainInputs((prev) => ({ ...prev, material: value }))
+                    }
+                  />
+                  <FloatingInput
+                    id="horas"
+                    label={t("serviceHours")}
+                    value={mainInputs.horas}
+                    onChange={(value) =>
+                      setMainInputs((prev) => ({ ...prev, horas: value }))
+                    }
+                  />
+                  <FloatingInput
+                    id="inss"
+                    label="INSS (R$)"
+                    value={mainInputs.inss}
+                    onChange={(value) =>
+                      setMainInputs((prev) => ({ ...prev, inss: value }))
+                    }
+                  />
+                </>
+              )}
+            </div>
+
+            <div className="actions-grid">
+              <button onClick={handleCalculate}>{t("calculate")}</button>
+              <button className="button-muted" onClick={handleNewAccount}>
+                {t("newAccount")}
+              </button>
+              <button onClick={() => setAccountModalOpen(true)}>
+                {selectedAccount ? t("editAccount") : t("registerAccount")}
+              </button>
+              <button id="resetar" onClick={handleReset}>
+                {t("clear")}
+              </button>
+            </div>
+
+            {results && (
+              <div className="resultado">
+                <h3>{isBlueMode ? t("blueResult") : t("yellowResult")}</h3>
+                <ResultRow label={t("sellFor")} value={formatCurrency(results.venda)} />
+                {selectedAccount?.vendidoPor && (
+                  <ResultRow
+                    label={t("soldFor")}
+                    value={formatCurrency(toNumber(selectedAccount.vendidoPor))}
+                  />
+                )}
+                {selectedAccount?.maoDeObra && (
+                  <ResultRow
+                    label={t("labor")}
+                    value={formatCurrency(toNumber(selectedAccount.maoDeObra))}
+                  />
+                )}
+                <ResultRow label={t("cost")} value={formatCurrency(results.custo)} />
+                <ResultRow
+                  label={t("finalProfit")}
+                  value={formatCurrency(results.lucro)}
+                  strong
+                />
+                {isBlueMode && results.montagem !== undefined && (
+                  <>
+                    <ResultRow
+                      label={t("assembly")}
+                      value={formatCurrency(results.montagem)}
+                    />
+                    <ResultRow
+                      label={t("coreAssembly")}
+                      value={formatCurrency(results.cm ?? 0)}
+                    />
+                    <ResultRow
+                      label={t("assemblySale")}
+                      value={formatCurrency(results.mv ?? 0)}
+                    />
+                  </>
+                )}
+              </div>
+            )}
           </main>
         </>
       )}

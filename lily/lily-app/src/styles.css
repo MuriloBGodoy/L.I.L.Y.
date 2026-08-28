@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Montserrat:wght@400;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap");
 
 :root {
   --primary: #ffd600;
@@ -10,6 +10,10 @@
   --success: #00ced1;
   --lily-glow-rgb: 255, 214, 0;
   --lily-secondary-rgb: 255, 154, 58;
+  /* Contorno fino do bloco do núcleo (chips e cards de chat). Vive num token
+     porque #00ced1 é ~28% mais escuro que #ffd600 e o mesmo alpha reprova no
+     piso de 3:1 no tema azul. */
+  --hairline: rgba(var(--lily-glow-rgb), 0.42);
   font-family: Montserrat, sans-serif;
   color: var(--text);
   background: var(--bg);
@@ -49,6 +53,7 @@ a {
   --primary: #00ced1;
   --lily-glow-rgb: 0, 206, 209;
   --lily-secondary-rgb: 82, 246, 255;
+  --hairline: rgba(var(--lily-glow-rgb), 0.6);
 }
 
 .toast-stack {
@@ -786,35 +791,55 @@ button:disabled {
   text-transform: uppercase;
 }
 
+/* O palco virou coluna: núcleo, saudação, pergunta, chips e os dois cards de
+   chat, nessa ordem, centralizados. Antes era um place-items:center com tudo
+   o mais posicionado em absoluto nos cantos — arranjo que não sobrevive a um
+   núcleo desse tamanho. */
 .lily-orbit-stage {
-  min-height: 360px;
+  /* Diâmetro do núcleo num token: as órbitas decorativas acompanham. */
+  --core-d: clamp(240px, 32vw, 412px);
   display: grid;
-  place-items: center;
+  justify-items: center;
+  align-content: center;
+  gap: 12px;
+  padding: 10px 0 2px;
   position: relative;
   isolation: isolate;
   z-index: 2;
 }
 
+/* As duas elipses eram inset:10%/24% do palco. Com o palco virando coluna alta
+   elas viravam arcos gigantes cruzando a pergunta e os chips — agora orbitam o
+   núcleo, que é o que sempre quiseram fazer. */
 .lily-orbit-stage::before,
 .lily-orbit-stage::after {
   content: "";
   position: absolute;
-  inset: 10%;
+  left: 50%;
+  top: calc(10px - var(--core-d) * 0.15);
+  width: calc(var(--core-d) * 1.3);
+  height: calc(var(--core-d) * 1.3);
   border: 1px solid rgba(var(--lily-glow-rgb), 0.18);
   border-radius: 50%;
-  transform: rotateX(62deg) rotateZ(-10deg);
+  transform: translateX(-50%) rotateX(62deg) rotateZ(-10deg);
   pointer-events: none;
   box-shadow: 0 0 30px rgba(var(--lily-glow-rgb), 0.08);
 }
 
 .lily-orbit-stage::after {
-  inset: 24%;
+  top: calc(10px + var(--core-d) * 0.06);
+  width: calc(var(--core-d) * 0.88);
+  height: calc(var(--core-d) * 0.88);
   border-color: rgba(var(--lily-secondary-rgb), 0.2);
-  transform: rotateX(58deg) rotateZ(28deg);
+  transform: translateX(-50%) rotateX(58deg) rotateZ(28deg);
 }
 
+/* NÚCLEO GRANDE. O teto de 412px é o maior que cabe em 1280x900 sem empurrar
+   os dois cards de chat para fora da primeira tela (medido, não estimado); o
+   piso de 240px é o que cabe na largura útil de 390px com folga para os anéis.
+   Era clamp(190px, 28vw, 310px). */
 .lily-core {
-  width: clamp(190px, 28vw, 310px);
+  width: var(--core-d, clamp(240px, 32vw, 412px));
   aspect-ratio: 1;
   padding: 0;
   border: 1px solid rgba(var(--lily-glow-rgb), 0.58);
@@ -985,82 +1010,108 @@ button:disabled {
   animation-duration: 920ms;
 }
 
-.lily-core-copy {
-  display: grid;
-  gap: 6px;
-  width: min(300px, 40%);
-  position: absolute;
-  left: clamp(12px, 4vw, 36px);
-  top: clamp(12px, 4vw, 30px);
-  z-index: 3;
-}
-
-.lily-core-copy h2,
 .lily-voice-console h3 {
   margin: 0;
   color: #fff;
   line-height: 1.1;
 }
 
-.lily-core-copy h2 {
-  font-size: clamp(1.7rem, 4vw, 2.6rem);
-}
-
-.lily-core-copy p,
 .lily-voice-console p,
 .lily-chat-message p {
   margin: 0;
 }
 
-.lily-core-copy p,
 .lily-voice-console p {
   color: rgba(255, 255, 255, 0.7);
   line-height: 1.5;
 }
 
-.lily-voice-status {
-  display: grid;
-  gap: 3px;
-  min-width: 132px;
-  padding: 10px 12px;
-  border: 1px solid rgba(var(--lily-glow-rgb), 0.28);
-  border-radius: 8px;
-  background: rgba(4, 6, 5, 0.78);
-  position: absolute;
-  right: clamp(12px, 4vw, 34px);
-  top: clamp(12px, 4vw, 30px);
-  z-index: 3;
-  text-align: right;
-}
-
-.lily-voice-status span {
-  color: var(--muted);
-  font-size: 0.72rem;
-  font-weight: 700;
+/* ---------------------------------------- saudação, pergunta e chips */
+/* O bloco que sobreviveu do redesign. Mono só aqui: é a identidade que ele
+   escolheu manter. O resto da tela continua em Montserrat. */
+.core-greet {
+  margin: 0;
+  /* Sem teto em ch: a linha em en-US é mais longa e quebrava em duas, o que
+     empurrava os dois cards de chat para fora da primeira tela. */
+  max-width: 100%;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  /* 12px é o piso: isto nomeia a pessoa, não é ambiente. */
+  font-size: 0.75rem;
+  letter-spacing: 0.16em;
+  line-height: 1.5;
+  text-align: center;
   text-transform: uppercase;
+  /* #b9c0bc sobre o fundo do painel dá ~8:1 — folgado para 12px. */
+  color: #b9c0bc;
 }
 
-.lily-voice-status strong {
+.core-ask {
+  margin: 0;
+  max-width: 30ch;
   color: #fff;
-  font-size: 0.9rem;
+  font-size: clamp(1.5rem, 3.6vw, 2.15rem);
+  font-weight: 700;
+  line-height: 1.14;
+  text-align: center;
 }
 
-.lily-voice-active {
-  border-color: rgba(var(--lily-glow-rgb), 0.68);
-  box-shadow: 0 0 20px rgba(var(--lily-glow-rgb), 0.22);
+.core-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  max-width: 780px;
 }
 
-.lily-voice-error {
-  border-color: rgba(255, 68, 68, 0.55);
+.core-chip {
+  width: auto;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 0;
+  background: rgba(var(--lily-glow-rgb), 0.06);
+  /* Contorno por inset box-shadow, não por border: o clip-path do chanfro
+     recorta box-shadow externo e border, e a borda sumiria nos cantos. */
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  color: var(--text);
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
+}
+
+/* O chip quente é CONTORNADO, não preenchido: o amarelo cheio está reservado
+   para o CALCULAR lá embaixo, e dois primários na mesma tela competem. */
+.core-chip.is-hot,
+.core-chip.is-on {
+  background: rgba(var(--lily-glow-rgb), 0.09);
+  box-shadow: inset 0 0 0 1px var(--primary);
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.core-chip:hover {
+  transform: none;
+  color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+/* O chanfro come outline: o foco vira anel interno + drop-shadow, que segue a
+   silhueta do clip em vez de ser recortado por ela. */
+.core-chip:focus-visible,
+.lily-mini:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--primary);
+  filter: drop-shadow(0 0 2px rgba(var(--lily-glow-rgb), 0.95))
+    drop-shadow(0 0 8px rgba(var(--lily-glow-rgb), 0.5));
 }
 
 .lily-mode-satellites {
   display: grid;
   grid-template-columns: repeat(2, minmax(120px, 1fr));
   gap: 14px;
-  width: min(430px, 92%);
-  position: absolute;
-  bottom: 6px;
+  width: min(760px, 100%);
   z-index: 4;
 }
 
@@ -1070,9 +1121,9 @@ button:disabled {
   align-items: center;
   gap: 10px;
   min-height: 68px;
-  padding: 10px 12px;
-  border: 1px solid rgba(var(--lily-glow-rgb), 0.28);
-  border-radius: 8px;
+  padding: 12px 16px;
+  border: 0;
+  border-radius: 0;
   background:
     linear-gradient(135deg, rgba(var(--lily-glow-rgb), 0.1), transparent),
     rgba(4, 6, 5, 0.86);
@@ -1080,13 +1131,16 @@ button:disabled {
   letter-spacing: 0;
   text-align: left;
   text-transform: none;
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.26);
+  /* Cantos chanfrados, como na foto. Contorno por inset box-shadow pelo mesmo
+     motivo dos chips: o clip-path recortaria border e sombra externa. */
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
 }
 
 .lily-mini.is-active,
 .lily-mini:hover {
-  border-color: var(--primary);
   background: rgba(var(--lily-glow-rgb), 0.14);
+  box-shadow: inset 0 0 0 1px var(--primary);
 }
 
 .lily-mini-orb {
@@ -2325,36 +2379,9 @@ button:hover {
     grid-template-columns: 1fr;
   }
 
-  .lily-assistant-panel {
-    min-height: 420px;
-  }
-
-  .lily-orbit-stage {
-    min-height: 390px;
-    align-content: center;
-    padding-top: 84px;
-    padding-bottom: 62px;
-  }
-
-  .lily-core-copy {
-    width: min(62%, calc(100% - 24px));
-    left: 12px;
-    top: 12px;
-  }
-
-  .lily-voice-status {
-    width: auto;
-    min-width: 116px;
-    right: 12px;
-    top: 12px;
-    text-align: right;
-  }
-
   .lily-mode-satellites {
     width: 100%;
-    position: relative;
-    bottom: auto;
-    margin-top: 22px;
+    margin-top: 8px;
   }
 
   .lily-voice-console {
@@ -2461,1266 +2488,31 @@ button:hover {
   }
 
   .lily-assistant-panel {
-    min-height: 500px;
     padding: 18px;
   }
 
+  /* 62vw e não a base de 240px: em 320 de largura sobram só 200 de área útil
+     dentro do painel, e um núcleo fixo estouraria. */
   .lily-orbit-stage {
-    min-height: 430px;
-    padding-top: 126px;
+    --core-d: min(62vw, 250px);
   }
 
-  .lily-core {
-    width: min(68vw, 230px);
+  .core-ask {
+    font-size: clamp(1.28rem, 6.4vw, 1.6rem);
   }
 
-  .lily-core-copy {
-    width: calc(100% - 24px);
-  }
-
-  .lily-voice-status {
-    top: 104px;
-    left: 12px;
-    right: auto;
-    text-align: left;
-  }
-}
-
-/* ============================================================================
-   PELE HUD ("JARVIS") — home apenas · rodada 2 de 2026-08-27
-   Protótipo: ui designs/2026-08-27-home-page/prototipo-jarvis.html
-   Intensidade implementada como padrão: J2 "Núcleo".
-
-   COMO TROCAR A INTENSIDADE
-   -------------------------
-   É uma classe no shell: `.app-shell.hud.hud-j1 | .hud-j2 | .hud-j3`.
-   Ela vem de `config.hudLevel` (App.tsx), persistido junto do resto do config,
-   e há um seletor na faixa de status da home. Para mudar o padrão de fábrica,
-   `defaultConfig.hudLevel` em App.tsx. Nenhuma outra tela consulta isso.
-
-   AS DUAS REGRAS QUE NÃO PODEM SER QUEBRADAS
-   ------------------------------------------
-   1. Nenhum hex de acento aqui dentro. Só var(--primary) e
-      rgba(var(--lily-glow-rgb), a) — é isso que faz a pele nascer funcionando
-      no tema amarelo e no `.app-shell.azul` sem uma linha a mais.
-   2. `isBlueMode` é regra de NEGÓCIO (formula do cálculo, campos, filtro de
-      contas). A pele NÃO se pendura nele. `.azul` aqui só ajusta os alphas,
-      porque #00ced1 é 28% mais escuro que #ffd600 e o mesmo alpha rende menos
-      contraste — medido, não estimado.
-
-   A CONTA DE LEGIBILIDADE (WCAG 2.1, sobre o fundo do painel)
-   ------------------------------------------------------------
-   amarelo cheio 13,96:1 · ciano cheio 10,09:1 · #0a0b0a sobre amarelo 13,96:1
-   amarelo 30% (hairline de cinema) 2,16:1 — REPROVA como borda
-   amarelo 45% 3,49:1 passa como borda · ciano 45% 2,78:1 REPROVA
-   Pisos: amarelo borda 41% / texto 54% · ciano borda 48% / texto 64%.
-   Daí --hud-la/--hud-lb serem maiores no `.azul`.
-   Consequência prática: nenhuma hairline pode ser a única coisa separando dois
-   campos. Por isso os inputs têm FUNDO preenchido além do contorno. Se alguém
-   tirar o preenchimento depois, a tela quebra em silêncio.
-   ========================================================================== */
-
-.app-shell.hud {
-  --hud-la: 0.3; /* linha decorativa */
-  --hud-lb: 0.45; /* linha estrutural */
-  --hud-bg: #0a0b0a;
-  --hud-panel: #101210;
-  --hud-panel-2: #141610;
-  --hud-dim: #9aa096; /* 7,37:1 sobre o fundo — passa como texto */
-  --hud-ch: 16px; /* chanfro dos painéis */
-  --hud-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
-  background: var(--hud-bg);
-}
-
-.app-shell.hud.azul {
-  --hud-la: 0.37;
-  --hud-lb: 0.52;
-}
-
-/* Chanfro reutilizável: dois cantos cortados, nunca quatro (ref. 16). */
-.app-shell.hud .hud-ch {
-  clip-path: polygon(
-    var(--hud-ch) 0,
-    100% 0,
-    100% calc(100% - var(--hud-ch)),
-    calc(100% - var(--hud-ch)) 100%,
-    0 100%,
-    0 var(--hud-ch)
-  );
-}
-
-/* ---------------------------------------------------------------- cabeçalho */
-/* Some a faixa amarela literal do `header` original
-   (linear-gradient(90deg,#181818 60%,var(--primary))): amarelo é fonte de luz,
-   não superfície. */
-.app-shell.hud > header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px 24px;
-  /* .hamburger (fixed, 45px, esquerda) e .user-menu (fixed, direita) flutuam
-     por cima. O header abre espaço para os dois em vez de disputar. */
-  padding: 18px clamp(180px, 26vw, 380px) 16px 72px;
-  text-align: left;
-  background: linear-gradient(180deg, #0e100e, var(--hud-bg));
-  border-bottom: 1px solid rgba(var(--lily-glow-rgb), var(--hud-la));
-}
-
-.app-shell.hud > header .hud-brand {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
-
-.app-shell.hud > header h1 {
-  font-size: clamp(1.4rem, 3.4vw, 1.85rem);
-  letter-spacing: 0.06em;
-}
-
-.app-shell.hud > header p {
-  margin: 0;
-  font-family: var(--hud-mono);
-  font-size: 0.68rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--hud-dim);
-}
-
-/* ------------------------------------------- segmento amarela / azul (D3) */
-.app-shell.hud .hud-seg {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.app-shell.hud .hud-seg-label,
-.app-shell.hud .hud-strip-item {
-  font-family: var(--hud-mono);
-  font-size: 0.62rem;
-  letter-spacing: 0.17em;
-  text-transform: uppercase;
-  color: var(--hud-dim);
-}
-
-.app-shell.hud .hud-seg-track {
-  display: inline-flex;
-  align-items: center;
-  gap: 1px;
-  padding: 1px;
-  background: rgba(var(--lily-glow-rgb), 0.1);
-}
-
-.app-shell.hud .hud-seg-track button {
-  width: auto;
-  padding: 7px 13px;
-  border: 0;
-  border-radius: 0;
-  background: var(--hud-panel);
-  box-shadow: none;
-  color: var(--hud-dim);
-  font-family: var(--hud-mono);
-  font-size: 0.63rem;
-  font-weight: 500;
-  letter-spacing: 0.13em;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-/* Célula preenchida em vez de contorno fino (ref. 22): o estado ativo é um
-   bloco sólido a 13,96:1, não uma linha. */
-.app-shell.hud .hud-seg-track button.is-on {
-  background: var(--primary);
-  color: #0a0b0a;
-  font-weight: 700;
-}
-
-.app-shell.hud .hud-seg-track button:hover {
-  transform: none;
-  color: var(--primary);
-}
-
-.app-shell.hud .hud-seg-track button.is-on:hover {
-  color: #0a0b0a;
-}
-
-/* ------------------------------------------------------- faixa de status */
-.app-shell.hud > .hud-strip {
-  width: min(1200px, calc(100vw - 40px));
-  margin: 16px auto -4px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 22px;
-  font-family: var(--hud-mono);
-  font-size: 0.62rem;
-  letter-spacing: 0.17em;
-  text-transform: uppercase;
-  color: var(--hud-dim);
-}
-
-.app-shell.hud .hud-strip b {
-  color: var(--primary);
-  font-weight: 500;
-}
-
-.app-shell.hud .hud-live {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--hud-dim);
-}
-
-.app-shell.hud .hud-live::before {
-  content: "";
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: #4a4f46;
-}
-
-.app-shell.hud .hud-live.is-on {
-  color: var(--primary);
-}
-
-.app-shell.hud .hud-live.is-on::before {
-  background: var(--primary);
-  box-shadow: 0 0 8px var(--primary);
-  animation: hudBlip 2.6s ease-in-out infinite;
-}
-
-.app-shell.hud .hud-levels {
-  margin-left: auto;
-}
-
-@keyframes hudBlip {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.28;
-  }
-}
-
-/* --------------------------------------------------------------- o palco */
-/* Direcao C: o <main> deixa de ser um card e vira PALCO. Sem borda amarela,
-   sem raio de 20px, sem largura de container — ele ocupa a tela e o nucleo
-   e a fonte de luz dela. A grade e as scanlines da pele JARVIS passam a
-   forrar o palco inteiro em vez de forrar uma caixa. */
-.app-shell.hud > main.core-stage {
-  position: relative;
-  isolation: isolate;
-  width: 100%;
-  max-width: none;
-  margin: 0;
-  padding: clamp(16px, 3vw, 34px) clamp(16px, 3vw, 28px) 0;
-  border: 0;
-  border-radius: 0;
-  background: var(--hud-bg);
-  box-shadow: none;
-  clip-path: none;
-  display: grid;
-  grid-template-rows: 1fr;
-  grid-auto-rows: auto;
-  gap: clamp(16px, 2.6vw, 28px);
-  /* 132px = cabecalho (87) + faixa de status (29) + a margem de 16 dela.
-     Com isto a gaveta FECHADA encosta na borda de baixo da janela em vez de
-     ficar 1px alem dela — medido em 1280x900, nao estimado. */
-  min-height: calc(100vh - 132px);
-}
-
-/* Gaveta aberta = o palco cede. O nucleo encolhe para o formulario caber sem
-   empurrar a tela inteira para fora da janela: e o que uma gaveta faz. */
-.app-shell.hud > main.core-stage.is-dock-open {
-  padding-top: clamp(12px, 2vw, 20px);
-}
-
-.app-shell.hud > main.core-stage.is-dock-open .core-orbit {
-  --hud-core-d: clamp(118px, 13vw, 158px);
-}
-
-/* grade + bloom: fundo, nunca estrutura (1,67:1 e 2,16:1 — nao separam nada,
-   e e justamente por isso que podem existir). O bloom fica em 50% 32%, que e
-   onde o nucleo esta: a luz da tela sai dele. */
-.app-shell.hud > main.core-stage::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background:
-    linear-gradient(90deg, rgba(var(--lily-glow-rgb), 0.055) 1px, transparent 1px) 0 0 /
-      68px 68px,
-    linear-gradient(0deg, rgba(var(--lily-glow-rgb), 0.035) 1px, transparent 1px) 0 0 /
-      68px 68px,
-    radial-gradient(66% 48% at 50% 32%, rgba(var(--lily-glow-rgb), 0.13), transparent 70%),
-    radial-gradient(42% 30% at 50% 34%, rgba(var(--lily-secondary-rgb), 0.07), transparent 72%);
-}
-
-.app-shell.hud > main.core-stage::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  pointer-events: none;
-  background: repeating-linear-gradient(
-    0deg,
-    transparent 0 2px,
-    rgba(var(--lily-glow-rgb), 0.045) 3px 4px
-  );
-  mix-blend-mode: screen;
-  opacity: 0.5;
-}
-
-/* J1 Visor: sem grade, sem scanlines. */
-.app-shell.hud.hud-j1 > main.core-stage::before {
-  background: radial-gradient(
-    66% 48% at 50% 32%,
-    rgba(var(--lily-glow-rgb), 0.13),
-    transparent 70%
-  );
-}
-
-.app-shell.hud.hud-j1 > main.core-stage::after {
-  display: none;
-}
-
-/* J3 Hangar: reticulo atravessando o palco + bloom forte. */
-.app-shell.hud.hud-j3 > main.core-stage::before {
-  background:
-    /* reticulo: uma camada de 1px de largura posicionada em 50%, nao um
-       gradiente de 1px dentro de uma camada de largura inteira — esse desenha
-       a linha na borda esquerda e some do centro. */
-    linear-gradient(
-        rgba(var(--lily-glow-rgb), 0.13),
-        rgba(var(--lily-glow-rgb), 0.13)
-      )
-      50% 0 / 1px 100% no-repeat,
-    linear-gradient(
-        rgba(var(--lily-glow-rgb), 0.13),
-        rgba(var(--lily-glow-rgb), 0.13)
-      )
-      0 32% / 100% 1px no-repeat,
-    linear-gradient(90deg, rgba(var(--lily-glow-rgb), 0.055) 1px, transparent 1px) 0 0 /
-      68px 68px,
-    linear-gradient(0deg, rgba(var(--lily-glow-rgb), 0.035) 1px, transparent 1px) 0 0 /
-      68px 68px,
-    radial-gradient(72% 54% at 50% 32%, rgba(var(--lily-glow-rgb), 0.2), transparent 72%),
-    radial-gradient(70% 40% at 50% 100%, rgba(var(--lily-secondary-rgb), 0.07), transparent 70%);
-}
-
-/* --------------------------------------------- o centro: nucleo + convite */
-.app-shell.hud .core-center {
-  align-self: center;
-  justify-self: center;
-  display: grid;
-  justify-items: center;
-  gap: clamp(12px, 2vw, 20px);
-  width: min(720px, 100%);
-  padding-bottom: clamp(8px, 2vw, 22px);
-  text-align: center;
-}
-
-/* A caixa existe para reservar o espaco dos aneis, que sao absolutos e
-   estouram o botao. 1,56x o diametro = nucleo + os 26% do anel externo dos
-   dois lados. */
-.app-shell.hud .core-orbit {
-  --hud-core-d: clamp(160px, 18vw, 228px);
-  position: relative;
-  transition: width 0.26s ease, height 0.26s ease;
-  display: grid;
-  place-items: center;
-  width: calc(var(--hud-core-d) * 1.56);
-  height: calc(var(--hud-core-d) * 1.56);
-}
-
-.app-shell.hud .core-orbit .lily-core {
-  width: var(--hud-core-d);
-}
-
-/* Aneis em % e nao em px: assim eles acompanham o clamp do nucleo em vez de
-   descolarem dele em telas estreitas. */
-.app-shell.hud .core-orbit .hud-ticks {
-  inset: -9%;
-}
-
-.app-shell.hud .core-orbit .hud-ticks-q {
-  inset: -14%;
-}
-
-.app-shell.hud .core-orbit .hud-gauge {
-  inset: -20%;
-}
-
-.app-shell.hud .core-orbit .hud-brackets {
-  inset: -26%;
-}
-
-.app-shell.hud .core-greet {
-  margin: 0;
-  font-family: var(--hud-mono);
-  /* 12px e o piso. Isto nomeia a pessoa, nao e ambiente. */
-  font-size: 0.75rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--hud-dim);
-}
-
-.app-shell.hud .core-ask {
-  margin: 0;
-  max-width: 30ch;
-  color: #fff;
-  font-size: clamp(1.5rem, 3.6vw, 2.15rem);
-  font-weight: 700;
-  line-height: 1.14;
-}
-
-/* ------------------------------------------------------------------ chips */
-.app-shell.hud .core-chips {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 10px;
-  max-width: 780px;
-}
-
-.app-shell.hud .core-chip {
-  width: auto;
-  padding: 10px 16px;
-  border: 0;
-  border-radius: 0;
-  background: rgba(var(--lily-glow-rgb), 0.06);
-  box-shadow: inset 0 0 0 1px rgba(var(--lily-glow-rgb), var(--hud-lb));
-  color: var(--text);
-  font-family: var(--hud-mono);
-  font-size: 0.75rem;
-  font-weight: 500;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
-  clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
-}
-
-/* O chip quente e CONTORNADO, nao preenchido: o amarelo cheio esta reservado
-   para o CALCULAR dentro da gaveta. Dois primarios na mesma tela era
-   exatamente o defeito D2 da rodada 1. */
-.app-shell.hud .core-chip.is-hot,
-.app-shell.hud .core-chip.is-on {
-  background: rgba(var(--lily-glow-rgb), 0.09);
-  box-shadow: inset 0 0 0 1px var(--primary);
-  color: var(--primary);
-  font-weight: 700;
-}
-
-.app-shell.hud .core-chip:hover {
-  transform: none;
-  color: var(--primary);
-}
-
-/* ------------------------------------------------- assistente sobre o palco */
-.app-shell.hud .core-assistant {
-  justify-self: center;
-  display: grid;
-  gap: 14px;
-  width: min(760px, 100%);
-}
-
-/* No layout antigo estes dois eram absolutos dentro do palco do orbe. */
-.app-shell.hud .core-assistant .lily-mode-satellites {
-  position: static;
-  width: 100%;
-}
-
-/* Os cartoes do assistente vieram do desenho antigo, de cantos arredondados.
-   Dentro do palco eles ficavam sendo a unica coisa redonda da tela — aqui eles
-   entram na mesma linguagem de chanfro do resto. */
-.app-shell.hud .core-assistant .lily-mini,
-.app-shell.hud .core-assistant .lily-voice-console,
-.app-shell.hud .core-assistant .lily-chat-card {
-  border: 0;
-  border-radius: 0;
-  background: var(--hud-panel);
-  box-shadow: inset 0 0 0 1px rgba(var(--lily-glow-rgb), var(--hud-lb));
-  clip-path: polygon(
-    var(--hud-ch) 0,
-    100% 0,
-    100% calc(100% - var(--hud-ch)),
-    calc(100% - var(--hud-ch)) 100%,
-    0 100%,
-    0 var(--hud-ch)
-  );
-}
-
-.app-shell.hud .core-assistant .lily-mini.is-active {
-  background: rgba(var(--lily-glow-rgb), 0.09);
-  box-shadow: inset 0 0 0 1px var(--primary);
-}
-
-.app-shell.hud .core-assistant .lily-mini:focus-visible,
-.app-shell.hud .core-assistant .lily-voice-console button:focus-visible {
-  outline: none;
-  box-shadow: inset 0 0 0 2px var(--primary);
-  filter: drop-shadow(0 0 2px rgba(var(--lily-glow-rgb), 0.95))
-    drop-shadow(0 0 8px rgba(var(--lily-glow-rgb), 0.5));
-}
-
-/* ============================================================== A GAVETA */
-/* "Uma gaveta que sobe de baixo, aberta por padrao quando voce ja tem uma
-   conta em andamento." O padrao vem do efeito em App.tsx; aqui esta so a
-   forma: encostada no rodape do palco, dois cantos de cima chanfrados. */
-.app-shell.hud .core-dock {
-  position: relative;
-  align-self: end;
-  justify-self: center;
-  width: min(880px, 100%);
-  background: var(--hud-panel);
-  box-shadow: inset 0 0 0 1px rgba(var(--lily-glow-rgb), var(--hud-lb));
-  clip-path: polygon(
-    var(--hud-ch) 0,
-    calc(100% - var(--hud-ch)) 0,
-    100% var(--hud-ch),
-    100% 100%,
-    0 100%,
-    0 var(--hud-ch)
-  );
-}
-
-/* Marcas de registro (ref. 18/24). Elas eram do painel do assistente, que
-   deixou de existir; sobrevivem aqui, e so nos DOIS cantos de baixo — os de
-   cima estao chanfrados e o clip cortaria a marca no meio. */
-.app-shell.hud.hud-j2 .core-dock::after,
-.app-shell.hud.hud-j3 .core-dock::after {
-  content: "";
-  position: absolute;
-  inset: 8px;
-  z-index: 2;
-  pointer-events: none;
-  background:
-    linear-gradient(90deg, rgba(var(--lily-glow-rgb), var(--hud-lb)) 14px, transparent 14px) 0
-      100% / 100% 1px no-repeat,
-    linear-gradient(0deg, rgba(var(--lily-glow-rgb), var(--hud-lb)) 14px, transparent 14px) 0 100% /
-      1px 100% no-repeat,
-    linear-gradient(270deg, rgba(var(--lily-glow-rgb), var(--hud-lb)) 14px, transparent 14px) 100%
-      100% / 100% 1px no-repeat,
-    linear-gradient(0deg, rgba(var(--lily-glow-rgb), var(--hud-lb)) 14px, transparent 14px) 100%
-      100% / 1px 100% no-repeat;
-}
-
-.app-shell.hud .core-dock-head {
-  margin: 0;
-  font: inherit;
-}
-
-/* A alca inteira e um <button>: teclado abre e fecha a gaveta com Enter ou
-   Espaco, e o leitor de tela recebe aria-expanded. */
-.app-shell.hud .core-dock-toggle {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 12px;
-  width: 100%;
-  padding: 12px clamp(16px, 3vw, 26px) 13px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  color: var(--text);
-  font-family: var(--hud-mono);
-  letter-spacing: 0;
-  text-align: left;
-  text-transform: none;
-}
-
-.app-shell.hud .core-dock-toggle:hover {
-  transform: none;
-  background: rgba(var(--lily-glow-rgb), 0.05);
-}
-
-/* A alca desenhada como faixa de 38px centrada, sem elemento extra. */
-.app-shell.hud .core-grab {
-  flex: 0 0 100%;
-  height: 3px;
-  margin-bottom: 8px;
-  background: linear-gradient(
-    90deg,
-    transparent calc(50% - 19px),
-    rgba(var(--lily-glow-rgb), 0.55) calc(50% - 19px) calc(50% + 19px),
-    transparent calc(50% + 19px)
-  );
-}
-
-.app-shell.hud .core-dock-title {
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.app-shell.hud .core-dock-tag {
-  padding: 4px 9px;
-  background: rgba(var(--lily-glow-rgb), 0.08);
-  color: var(--hud-dim);
-  font-size: 0.72rem;
-  letter-spacing: 0.08em;
-}
-
-.app-shell.hud .core-dock-hint {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  margin-left: auto;
-  /* 10px so para ambiente: isto e o rotulo do proprio controle, nao um dado. */
-  font-size: 0.63rem;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--hud-dim);
-}
-
-.app-shell.hud .core-dock-hint::after {
-  content: "";
-  width: 0;
-  height: 0;
-  border-left: 4px solid transparent;
-  border-right: 4px solid transparent;
-  border-top: 5px solid currentColor;
-  transition: transform 0.2s ease;
-}
-
-.app-shell.hud .core-dock.is-open .core-dock-hint::after {
-  transform: rotate(180deg);
-}
-
-.app-shell.hud .core-dock-body {
-  display: grid;
-  gap: clamp(18px, 2.6vw, 26px);
-  padding: 4px clamp(16px, 3vw, 26px) clamp(18px, 2.6vw, 24px);
-  border-top: 1px solid rgba(var(--lily-glow-rgb), var(--hud-la));
-}
-
-/* `display:grid` numa classe vence o `[hidden]{display:none}` do navegador,
-   e a gaveta nunca fecharia. Esta linha e o que faz o `hidden` valer. */
-.app-shell.hud .core-dock-body[hidden] {
-  display: none;
-}
-
-@keyframes coreDockRise {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-.app-shell.hud .core-dock.is-open .core-dock-body {
-  animation: coreDockRise 0.26s ease-out;
-}
-
-.app-shell.hud .core-dock .inputs {
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  margin-top: 16px;
-  row-gap: 30px;
-}
-
-/* ------------------------------------------------------- a linha-resumo */
-.app-shell.hud .core-sum {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 14px 24px;
-  padding-top: clamp(13px, 2vw, 17px);
-  border-top: 1px solid rgba(var(--lily-glow-rgb), var(--hud-la));
-}
-
-.app-shell.hud .core-sum-profit {
-  display: grid;
-  gap: 3px;
-}
-
-.app-shell.hud .core-sum-profit .k {
-  font-family: var(--hud-mono);
-  font-size: 0.75rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--hud-dim);
-}
-
-/* O dinheiro e a unica coisa em contraste maximo da tela. */
-.app-shell.hud .core-sum-profit strong {
-  font-family: var(--hud-mono);
-  font-size: clamp(1.5rem, 3.4vw, 2rem);
-  font-weight: 700;
-  line-height: 1;
-  color: var(--primary);
-  font-variant-numeric: tabular-nums;
-  text-shadow: 0 0 20px rgba(var(--lily-glow-rgb), 0.4);
-}
-
-.app-shell.hud .core-sum-profit strong.is-empty {
-  color: var(--hud-dim);
-  text-shadow: none;
-}
-
-.app-shell.hud .core-sum-side {
-  display: grid;
-  gap: 5px;
-  margin: 0;
-}
-
-.app-shell.hud .core-sum-side > div {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-}
-
-.app-shell.hud .core-sum-side dt {
-  font-family: var(--hud-mono);
-  font-size: 0.75rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--hud-dim);
-}
-
-/* Branco, nao amarelo: venda e custo sao contexto do lucro, nao concorrentes. */
-.app-shell.hud .core-sum-side dd {
-  margin: 0;
-  font-family: var(--hud-mono);
-  font-size: 0.78rem;
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-}
-
-.app-shell.hud .core-sum-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-left: auto;
-}
-
-/* --------------------------------------------------- os tres niveis (D2) */
-/* 1. CALCULAR cheio · 2. CADASTRAR e NOVA CONTA contornados · 3. APAGAR em
-   --danger. Sobreviveu inteiro da rodada 1, so mudou de endereco. */
-.app-shell.hud .core-go,
-.app-shell.hud .core-sum-actions .button-muted,
-.app-shell.hud .core-dock-minor button {
-  width: auto;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-  clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
-}
-
-.app-shell.hud .core-go {
-  padding: 15px 28px;
-  background: var(--primary);
-  color: #0a0b0a;
-}
-
-.app-shell.hud .core-sum-actions .button-muted {
-  padding: 15px 22px;
-  background: rgba(var(--lily-glow-rgb), 0.06);
-  color: var(--text);
-  box-shadow: inset 0 0 0 1px rgba(var(--lily-glow-rgb), var(--hud-lb));
-}
-
-.app-shell.hud .core-dock-minor {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.app-shell.hud .core-dock-minor button {
-  padding: 11px 20px;
-  font-size: 0.78rem;
-}
-
-.app-shell.hud .core-dock-minor .button-muted {
-  background: rgba(var(--lily-glow-rgb), 0.06);
-  color: var(--text);
-  box-shadow: inset 0 0 0 1px rgba(var(--lily-glow-rgb), var(--hud-lb));
-}
-
-.app-shell.hud .core-dock-minor #resetar {
-  background: rgba(255, 68, 68, 0.07);
-  color: #ff7b7b;
-  box-shadow: inset 0 0 0 1px rgba(255, 68, 68, 0.5);
-}
-
-.app-shell.hud .core-go:hover,
-.app-shell.hud .core-dock-minor button:hover,
-.app-shell.hud .core-sum-actions .button-muted:hover {
-  transform: none;
-  filter: brightness(1.12);
-}
-
-/* ------------------------------------------------------------------ foco */
-/* clip-path recorta box-shadow externo E outline: um :focus-visible normal
-   simplesmente NAO aparece num elemento chanfrado — compila, roda, nao avisa.
-   A saida e dupla: anel interno (que o clip nao corta) + drop-shadow, que
-   segue a silhueta do chanfro em vez de ser recortado por ela. */
-.app-shell.hud .core-chip:focus-visible,
-.app-shell.hud .core-go:focus-visible,
-.app-shell.hud .core-dock-minor button:focus-visible,
-.app-shell.hud .core-sum-actions .button-muted:focus-visible {
-  outline: none;
-  box-shadow: inset 0 0 0 2px var(--primary);
-  filter: drop-shadow(0 0 2px rgba(var(--lily-glow-rgb), 0.95))
-    drop-shadow(0 0 8px rgba(var(--lily-glow-rgb), 0.5));
-}
-
-/* A alca nao tem chanfro, entao aqui o outline funciona — e e o melhor
-   indicador possivel para o controle que abre e fecha a gaveta. */
-.app-shell.hud .core-dock-toggle:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: -3px;
-  background: rgba(var(--lily-glow-rgb), 0.07);
-}
-
-.app-shell.hud .core-orbit .lily-core:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 6px;
-}
-
-/* ------------------------------------------------- o núcleo como instrumento */
-/* O anel externo não gira à toa: ele MEDE a margem (--hud-p). É a única
-   leitura do app que não existia em lugar nenhum antes. */
-.app-shell.hud .hud-ticks,
-.app-shell.hud .hud-ticks-q,
-.app-shell.hud .hud-gauge,
-.app-shell.hud .hud-brackets {
-  position: absolute;
-  border-radius: 50%;
-  pointer-events: none;
-}
-
-/* As duas circunferências decorativas que só giravam saem de cena no HUD: o
-   lugar delas passa a ser ocupado por anéis que medem alguma coisa. O núcleo
-   em si — a assinatura do produto — continua intacto. */
-.app-shell.hud .lily-core-ring.ring-one,
-.app-shell.hud .lily-core-ring.ring-two {
-  display: none;
-}
-
-/* radial-gradient usa farthest-corner por padrão: ali "50%" vale ~70% do raio
-   do elemento e a coroa vaza para dentro, virando um sol de raios. closest-side
-   é o que faz "100%" significar a borda de verdade. */
-.app-shell.hud .hud-ticks {
-  inset: -22px;
-  background: repeating-conic-gradient(
-    from 0deg,
-    rgba(var(--lily-glow-rgb), var(--hud-lb)) 0deg 0.55deg,
-    transparent 0.55deg 6deg
-  );
-  -webkit-mask: radial-gradient(
-    circle closest-side,
-    transparent 0 calc(100% - 9px),
-    #000 calc(100% - 9px) 100%
-  );
-  mask: radial-gradient(
-    circle closest-side,
-    transparent 0 calc(100% - 9px),
-    #000 calc(100% - 9px) 100%
-  );
-}
-
-.app-shell.hud .hud-ticks-q {
-  inset: -34px;
-  background: repeating-conic-gradient(
-    from 0deg,
-    rgba(var(--lily-glow-rgb), var(--hud-lb)) 0deg 1.2deg,
-    transparent 1.2deg 30deg
-  );
-  -webkit-mask: radial-gradient(
-    circle closest-side,
-    transparent 0 calc(100% - 14px),
-    #000 calc(100% - 14px) 100%
-  );
-  mask: radial-gradient(
-    circle closest-side,
-    transparent 0 calc(100% - 14px),
-    #000 calc(100% - 14px) 100%
-  );
-}
-
-.app-shell.hud .hud-gauge {
-  inset: -50px;
-  background: conic-gradient(
-    from -90deg,
-    var(--primary) 0 calc(var(--hud-p, 0) * 3.6deg),
-    rgba(var(--lily-glow-rgb), 0.1) calc(var(--hud-p, 0) * 3.6deg) 360deg
-  );
-  -webkit-mask: radial-gradient(
-    circle closest-side,
-    transparent 0 calc(100% - 5px),
-    #000 calc(100% - 5px) 100%
-  );
-  mask: radial-gradient(
-    circle closest-side,
-    transparent 0 calc(100% - 5px),
-    #000 calc(100% - 5px) 100%
-  );
-}
-
-.app-shell.hud .hud-brackets {
-  inset: -64px;
-}
-
-.app-shell.hud .hud-brackets::before,
-.app-shell.hud .hud-brackets::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  width: 10px;
-  height: 10px;
-  border-top: 1px solid rgba(var(--lily-glow-rgb), var(--hud-lb));
-  border-left: 1px solid rgba(var(--lily-glow-rgb), var(--hud-lb));
-}
-
-.app-shell.hud .hud-brackets::before {
-  top: 0;
-  transform: translateX(-50%) rotate(45deg);
-}
-
-.app-shell.hud .hud-brackets::after {
-  bottom: 0;
-  transform: translateX(-50%) rotate(-135deg);
-}
-
-/* O interior do núcleo é a assinatura do produto e continua lá — só baixa o
-   volume. Ele estava mais claro que o R$ da tela, e a regra desta pele é que o
-   dinheiro é a única coisa em contraste máximo. Nada foi removido. */
-.app-shell.hud .lily-core::before {
-  opacity: 0.34;
-}
-
-.app-shell.hud .lily-core-grid {
-  opacity: 0.14;
-}
-
-.app-shell.hud .lily-core-nodes {
-  opacity: 0.5;
-}
-
-.app-shell.hud .lily-core-scan {
-  opacity: 0.3;
-}
-
-.app-shell.hud .lily-core {
-  box-shadow:
-    0 0 26px rgba(var(--lily-glow-rgb), 0.26),
-    0 0 120px rgba(var(--lily-glow-rgb), 0.12),
-    inset 0 0 40px rgba(0, 0, 0, 0.6),
-    inset 0 0 110px rgba(0, 0, 0, 0.86);
-}
-
-/* J1: um anel só. */
-.app-shell.hud.hud-j1 .hud-ticks-q,
-.app-shell.hud.hud-j1 .hud-gauge,
-.app-shell.hud.hud-j1 .hud-brackets {
-  display: none;
-}
-
-/* A leitura mora na faixa escura entre o orbe e a coroa de marcações — nunca
-   em cima do orbe aceso, que é laranja brilhante. */
-.app-shell.hud .hud-read {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, calc(var(--hud-core-d, 240px) * 0.3));
-  z-index: 4;
-  display: grid;
-  justify-items: center;
-  gap: 1px;
-  padding: 3px 9px 4px;
-  background: rgba(8, 9, 8, 0.74);
-  pointer-events: none;
-  text-align: center;
-}
-
-.app-shell.hud .hud-read strong {
-  font-family: var(--hud-mono);
-  font-size: 1.2rem;
-  font-weight: 700;
-  line-height: 1;
-  color: var(--primary);
-  font-variant-numeric: tabular-nums;
-  text-shadow: 0 0 14px rgba(var(--lily-glow-rgb), 0.55);
-}
-
-.app-shell.hud .hud-read span {
-  font-family: var(--hud-mono);
-  font-size: 0.6rem;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--hud-dim);
-}
-
-.app-shell.hud.hud-j1 .hud-read {
-  display: none;
-}
-
-.app-shell.hud .lily-voice-status {
-  display: none;
-}
-
-/* -------------------------------------------------------------- campos */
-.app-shell.hud > main .input-group input {
-  /* fundo PREENCHIDO, não transparente: a hairline sozinha não passa no piso
-     de 3:1 e não pode ser a única coisa desenhando o campo. */
-  background: var(--hud-panel-2);
-  border: 0;
-  border-radius: 0;
-  box-shadow: inset 0 0 0 1px rgba(var(--lily-glow-rgb), 0.28);
-  font-family: var(--hud-mono);
-  font-variant-numeric: tabular-nums;
-  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
-}
-
-/* clip-path recorta box-shadow externo E outline: um :focus-visible normal
-   simplesmente não aparece num campo chanfrado — compila, roda, não avisa.
-   drop-shadow segue a silhueta do clip-path e é a saída que funciona. */
-.app-shell.hud > main .input-group input:focus {
-  box-shadow: inset 0 0 0 1px var(--primary);
-  filter: drop-shadow(0 0 2px rgba(var(--lily-glow-rgb), 0.95))
-    drop-shadow(0 0 7px rgba(var(--lily-glow-rgb), 0.45));
-}
-
-.app-shell.hud > main .input-group label {
-  background: transparent;
-  font-family: var(--hud-mono);
-  font-size: 0.66rem;
-  letter-spacing: 0.13em;
-  text-transform: uppercase;
-  color: var(--hud-dim);
-  top: -18px;
-  left: 0;
-}
-
-.app-shell.hud > main .input-group input:focus + label,
-.app-shell.hud > main .input-group input:not(:placeholder-shown) + label {
-  top: -18px;
-  left: 0;
-  font-size: 0.66rem;
-}
-
-.app-shell.hud > main .inputs {
-  margin-top: 20px;
-  row-gap: 30px;
-}
-
-/* ------------------------------------------------------------ resultado */
-/* Telemetria com linha pontilhada (ref. 15). O dinheiro é a única coisa em
-   contraste máximo: regra fiscalizável em code review — nada de HUD passa de
-   30% de alpha, e nada acima de 30% deixa de ser dado. */
-.app-shell.hud > main .resultado {
-  background: var(--hud-panel-2);
-  border-radius: 0;
-  box-shadow: inset 0 0 0 1px rgba(var(--lily-glow-rgb), var(--hud-lb));
-  clip-path: polygon(
-    var(--hud-ch) 0,
-    100% 0,
-    100% calc(100% - var(--hud-ch)),
-    calc(100% - var(--hud-ch)) 100%,
-    0 100%,
-    0 var(--hud-ch)
-  );
-}
-
-.app-shell.hud > main .resultado h3 {
-  font-family: var(--hud-mono);
-  font-size: 0.7rem;
-  font-weight: 500;
-  letter-spacing: 0.17em;
-  text-transform: uppercase;
-}
-
-.app-shell.hud > main .resultado .linha {
-  align-items: baseline;
-  gap: 10px;
-  font-family: var(--hud-mono);
-  /* 12px é o piso que eu adotaria para qualquer rótulo que nomeie dinheiro.
-     10px fica só para ambiente (status, hora, versão) — ver a faixa de status. */
-  font-size: 0.75rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--hud-dim);
-}
-
-.app-shell.hud > main .resultado .linha::before {
-  content: "";
-  order: 1;
-  flex: 1;
-  min-width: 14px;
-  border-bottom: 1px dotted rgba(var(--lily-glow-rgb), var(--hud-lb));
-  transform: translateY(-3px);
-}
-
-.app-shell.hud > main .resultado .linha > :last-child {
-  order: 2;
-  color: var(--primary);
-  font-variant-numeric: tabular-nums;
-}
-
-.app-shell.hud > main .resultado .linha-strong {
-  border-top: 1px solid rgba(var(--lily-glow-rgb), var(--hud-la));
-  font-size: 0.8rem;
-}
-
-.app-shell.hud > main .resultado .linha-strong > :last-child {
-  font-size: 1.6rem;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  text-shadow: 0 0 20px rgba(var(--lily-glow-rgb), 0.4);
-}
-
-/* ------------------------------------------------------- J3 mais denso */
-.app-shell.hud.hud-j3 > main .resultado .linha {
-  font-size: 0.72rem;
-}
-
-/* --------------------------------------------------------- 390 px e abaixo */
-@media (max-width: 560px) {
-  .app-shell.hud {
-    --hud-ch: 12px;
-  }
-
-  .app-shell.hud > header {
-    padding: 14px 16px 12px 70px;
-  }
-
-  .app-shell.hud > header h1 {
-    font-size: 1.25rem;
-  }
-
-  .app-shell.hud .hud-seg {
-    justify-items: start;
-  }
-
-  .app-shell.hud > .hud-strip {
-    width: calc(100vw - 32px);
-    gap: 6px 14px;
-  }
-
-  .app-shell.hud .hud-levels {
-    margin-left: 0;
-  }
-
-  .app-shell.hud > main .resultado .linha-strong > :last-child {
-    font-size: 1.3rem;
-  }
-
-  /* "E aqui que a C brilha": o palco encosta nas bordas e a gaveta vira a
-     folha de baixo da tela, do jeito que o mockup de 390 px desenhou. */
-  .app-shell.hud > main.core-stage {
-    padding: 12px 12px 0;
-    gap: 14px;
-    min-height: calc(100vh - 178px);
-  }
-
-  .app-shell.hud .core-orbit {
-    --hud-core-d: clamp(132px, 40vw, 176px);
-  }
-
-  .app-shell.hud .core-center {
-    gap: 12px;
-  }
-
-  .app-shell.hud .core-ask {
-    font-size: 1.45rem;
-  }
-
-  /* No celular a saudacao e so o nome. A assinatura da oficina ja esta no
-     cabecalho, duas linhas acima. */
-  .app-shell.hud .core-greet-brand {
+  /* No celular a saudação fica só com o nome: a assinatura da oficina já está
+     no cabeçalho, logo acima. */
+  .core-greet-brand {
     display: none;
   }
 
-  .app-shell.hud .core-chip {
-    padding: 9px 13px;
-    font-size: 0.72rem;
-    letter-spacing: 0.08em;
-  }
-
-  .app-shell.hud .core-dock {
+  .core-chips {
     width: 100%;
   }
 
-  .app-shell.hud .core-dock .inputs {
-    grid-template-columns: 1fr;
-    row-gap: 28px;
-  }
-
-  .app-shell.hud .core-sum {
-    gap: 12px 16px;
-  }
-
-  .app-shell.hud .core-sum-side {
-    margin-left: auto;
-    text-align: right;
-  }
-
-  .app-shell.hud .core-sum-side > div {
-    justify-content: flex-end;
-  }
-
-  .app-shell.hud .core-sum-actions {
-    width: 100%;
-    margin-left: 0;
-  }
-
-  .app-shell.hud .core-go,
-  .app-shell.hud .core-sum-actions .button-muted,
-  .app-shell.hud .core-dock-minor button {
-    flex: 1 1 140px;
-    padding: 14px 12px;
-  }
-
-  .app-shell.hud .core-dock-tag {
-    font-size: 0.68rem;
-  }
-}
-
-/* ===========================================================================
-   MOVIMENTO
-   O app tinha 7 @keyframes e ZERO regras de prefers-reduced-motion antes desta
-   mudança. Este bloco cobre as animações novas E as sete que já existiam.
-   A regra: movimento só decora, nunca informa. Com ele desligado o HUD
-   continua legível e utilizável — o gauge de margem é estático e permanece,
-   nenhum dado se perde, some só o show.
-   ========================================================================= */
-@media (prefers-reduced-motion: reduce) {
-  .app-shell .lily-core,
-  .app-shell .lily-core::before,
-  .app-shell .lily-core::after,
-  .app-shell .lily-core-ring,
-  .app-shell .lily-core-grid,
-  .app-shell .lily-core-nodes,
-  .app-shell .lily-core-scan,
-  .app-shell .lily-core-pulse,
-  .app-shell .lily-orbit-stage::before,
-  .app-shell .lily-orbit-stage::after,
-  .app-shell.hud .hud-live.is-on::before {
-    animation: none !important;
-  }
-
-  .app-shell.hud .core-dock.is-open .core-dock-body {
-    animation: none;
-  }
-
-  .app-shell.hud .core-dock-hint::after,
-  .app-shell.hud .core-orbit {
-    transition: none;
-  }
-
-  .app-shell button:hover {
-    transform: none;
-  }
-
-  .app-shell,
-  .app-shell * {
-    scroll-behavior: auto;
+  .core-chip {
+    flex: 1 1 100%;
+    text-align: center;
   }
 }
