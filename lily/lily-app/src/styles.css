@@ -2704,27 +2704,47 @@ button:hover {
   }
 }
 
-/* ------------------------------------------------------------ painel main */
-.app-shell.hud > main {
+/* --------------------------------------------------------------- o palco */
+/* Direcao C: o <main> deixa de ser um card e vira PALCO. Sem borda amarela,
+   sem raio de 20px, sem largura de container — ele ocupa a tela e o nucleo
+   e a fonte de luz dela. A grade e as scanlines da pele JARVIS passam a
+   forrar o palco inteiro em vez de forrar uma caixa. */
+.app-shell.hud > main.core-stage {
   position: relative;
   isolation: isolate;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: clamp(16px, 3vw, 34px) clamp(16px, 3vw, 28px) 0;
   border: 0;
   border-radius: 0;
-  background: var(--hud-panel);
-  box-shadow: inset 0 0 0 1px rgba(var(--lily-glow-rgb), var(--hud-lb));
-  clip-path: polygon(
-    var(--hud-ch) 0,
-    100% 0,
-    100% calc(100% - var(--hud-ch)),
-    calc(100% - var(--hud-ch)) 100%,
-    0 100%,
-    0 var(--hud-ch)
-  );
+  background: var(--hud-bg);
+  box-shadow: none;
+  clip-path: none;
+  display: grid;
+  grid-template-rows: 1fr;
+  grid-auto-rows: auto;
+  gap: clamp(16px, 2.6vw, 28px);
+  /* 132px = cabecalho (87) + faixa de status (29) + a margem de 16 dela.
+     Com isto a gaveta FECHADA encosta na borda de baixo da janela em vez de
+     ficar 1px alem dela — medido em 1280x900, nao estimado. */
+  min-height: calc(100vh - 132px);
 }
 
-/* grade + scanlines + bloom: fundo, nunca estrutura (1,67:1 e 2,16:1 — não
-   separam nada, e é justamente por isso que podem existir). */
-.app-shell.hud > main::before {
+/* Gaveta aberta = o palco cede. O nucleo encolhe para o formulario caber sem
+   empurrar a tela inteira para fora da janela: e o que uma gaveta faz. */
+.app-shell.hud > main.core-stage.is-dock-open {
+  padding-top: clamp(12px, 2vw, 20px);
+}
+
+.app-shell.hud > main.core-stage.is-dock-open .core-orbit {
+  --hud-core-d: clamp(118px, 13vw, 158px);
+}
+
+/* grade + bloom: fundo, nunca estrutura (1,67:1 e 2,16:1 — nao separam nada,
+   e e justamente por isso que podem existir). O bloom fica em 50% 32%, que e
+   onde o nucleo esta: a luz da tela sai dele. */
+.app-shell.hud > main.core-stage::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -2735,10 +2755,11 @@ button:hover {
       68px 68px,
     linear-gradient(0deg, rgba(var(--lily-glow-rgb), 0.035) 1px, transparent 1px) 0 0 /
       68px 68px,
-    radial-gradient(46% 42% at 50% 22%, rgba(var(--lily-glow-rgb), 0.11), transparent 70%);
+    radial-gradient(66% 48% at 50% 32%, rgba(var(--lily-glow-rgb), 0.13), transparent 70%),
+    radial-gradient(42% 30% at 50% 34%, rgba(var(--lily-secondary-rgb), 0.07), transparent 72%);
 }
 
-.app-shell.hud > main::after {
+.app-shell.hud > main.core-stage::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -2754,22 +2775,22 @@ button:hover {
 }
 
 /* J1 Visor: sem grade, sem scanlines. */
-.app-shell.hud.hud-j1 > main::before {
+.app-shell.hud.hud-j1 > main.core-stage::before {
   background: radial-gradient(
-    46% 42% at 50% 22%,
-    rgba(var(--lily-glow-rgb), 0.11),
+    66% 48% at 50% 32%,
+    rgba(var(--lily-glow-rgb), 0.13),
     transparent 70%
   );
 }
 
-.app-shell.hud.hud-j1 > main::after {
+.app-shell.hud.hud-j1 > main.core-stage::after {
   display: none;
 }
 
-/* J3 Hangar: retículo atravessando o painel + bloom forte. */
-.app-shell.hud.hud-j3 > main::before {
+/* J3 Hangar: reticulo atravessando o palco + bloom forte. */
+.app-shell.hud.hud-j3 > main.core-stage::before {
   background:
-    /* retículo: uma camada de 1px de largura posicionada em 50%, não um
+    /* reticulo: uma camada de 1px de largura posicionada em 50%, nao um
        gradiente de 1px dentro de uma camada de largura inteira — esse desenha
        a linha na borda esquerda e some do centro. */
     linear-gradient(
@@ -2781,67 +2802,486 @@ button:hover {
         rgba(var(--lily-glow-rgb), 0.13),
         rgba(var(--lily-glow-rgb), 0.13)
       )
-      0 34% / 100% 1px no-repeat,
+      0 32% / 100% 1px no-repeat,
     linear-gradient(90deg, rgba(var(--lily-glow-rgb), 0.055) 1px, transparent 1px) 0 0 /
       68px 68px,
     linear-gradient(0deg, rgba(var(--lily-glow-rgb), 0.035) 1px, transparent 1px) 0 0 /
       68px 68px,
-    radial-gradient(52% 48% at 50% 22%, rgba(var(--lily-glow-rgb), 0.2), transparent 72%),
+    radial-gradient(72% 54% at 50% 32%, rgba(var(--lily-glow-rgb), 0.2), transparent 72%),
     radial-gradient(70% 40% at 50% 100%, rgba(var(--lily-secondary-rgb), 0.07), transparent 70%);
 }
 
-/* -------------------------------------------------- painel do assistente */
-/* O painel já era um HUD dentro de uma caixa. Aqui ele deixa de ser caixa e
-   passa a iluminar o painel inteiro (ref. 05 da rodada 1, ref. 13 desta). */
-.app-shell.hud .lily-assistant-panel {
+/* --------------------------------------------- o centro: nucleo + convite */
+.app-shell.hud .core-center {
+  align-self: center;
+  justify-self: center;
+  display: grid;
+  justify-items: center;
+  gap: clamp(12px, 2vw, 20px);
+  width: min(720px, 100%);
+  padding-bottom: clamp(8px, 2vw, 22px);
+  text-align: center;
+}
+
+/* A caixa existe para reservar o espaco dos aneis, que sao absolutos e
+   estouram o botao. 1,56x o diametro = nucleo + os 26% do anel externo dos
+   dois lados. */
+.app-shell.hud .core-orbit {
+  --hud-core-d: clamp(160px, 18vw, 228px);
+  position: relative;
+  transition: width 0.26s ease, height 0.26s ease;
+  display: grid;
+  place-items: center;
+  width: calc(var(--hud-core-d) * 1.56);
+  height: calc(var(--hud-core-d) * 1.56);
+}
+
+.app-shell.hud .core-orbit .lily-core {
+  width: var(--hud-core-d);
+}
+
+/* Aneis em % e nao em px: assim eles acompanham o clamp do nucleo em vez de
+   descolarem dele em telas estreitas. */
+.app-shell.hud .core-orbit .hud-ticks {
+  inset: -9%;
+}
+
+.app-shell.hud .core-orbit .hud-ticks-q {
+  inset: -14%;
+}
+
+.app-shell.hud .core-orbit .hud-gauge {
+  inset: -20%;
+}
+
+.app-shell.hud .core-orbit .hud-brackets {
+  inset: -26%;
+}
+
+.app-shell.hud .core-greet {
+  margin: 0;
+  font-family: var(--hud-mono);
+  /* 12px e o piso. Isto nomeia a pessoa, nao e ambiente. */
+  font-size: 0.75rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--hud-dim);
+}
+
+.app-shell.hud .core-ask {
+  margin: 0;
+  max-width: 30ch;
+  color: #fff;
+  font-size: clamp(1.5rem, 3.6vw, 2.15rem);
+  font-weight: 700;
+  line-height: 1.14;
+}
+
+/* ------------------------------------------------------------------ chips */
+.app-shell.hud .core-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  max-width: 780px;
+}
+
+.app-shell.hud .core-chip {
+  width: auto;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 0;
+  background: rgba(var(--lily-glow-rgb), 0.06);
+  box-shadow: inset 0 0 0 1px rgba(var(--lily-glow-rgb), var(--hud-lb));
+  color: var(--text);
+  font-family: var(--hud-mono);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
+}
+
+/* O chip quente e CONTORNADO, nao preenchido: o amarelo cheio esta reservado
+   para o CALCULAR dentro da gaveta. Dois primarios na mesma tela era
+   exatamente o defeito D2 da rodada 1. */
+.app-shell.hud .core-chip.is-hot,
+.app-shell.hud .core-chip.is-on {
+  background: rgba(var(--lily-glow-rgb), 0.09);
+  box-shadow: inset 0 0 0 1px var(--primary);
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.app-shell.hud .core-chip:hover {
+  transform: none;
+  color: var(--primary);
+}
+
+/* ------------------------------------------------- assistente sobre o palco */
+.app-shell.hud .core-assistant {
+  justify-self: center;
+  display: grid;
+  gap: 14px;
+  width: min(760px, 100%);
+}
+
+/* No layout antigo estes dois eram absolutos dentro do palco do orbe. */
+.app-shell.hud .core-assistant .lily-mode-satellites {
+  position: static;
+  width: 100%;
+}
+
+/* Os cartoes do assistente vieram do desenho antigo, de cantos arredondados.
+   Dentro do palco eles ficavam sendo a unica coisa redonda da tela — aqui eles
+   entram na mesma linguagem de chanfro do resto. */
+.app-shell.hud .core-assistant .lily-mini,
+.app-shell.hud .core-assistant .lily-voice-console,
+.app-shell.hud .core-assistant .lily-chat-card {
+  border: 0;
+  border-radius: 0;
+  background: var(--hud-panel);
+  box-shadow: inset 0 0 0 1px rgba(var(--lily-glow-rgb), var(--hud-lb));
+  clip-path: polygon(
+    var(--hud-ch) 0,
+    100% 0,
+    100% calc(100% - var(--hud-ch)),
+    calc(100% - var(--hud-ch)) 100%,
+    0 100%,
+    0 var(--hud-ch)
+  );
+}
+
+.app-shell.hud .core-assistant .lily-mini.is-active {
+  background: rgba(var(--lily-glow-rgb), 0.09);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.app-shell.hud .core-assistant .lily-mini:focus-visible,
+.app-shell.hud .core-assistant .lily-voice-console button:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--primary);
+  filter: drop-shadow(0 0 2px rgba(var(--lily-glow-rgb), 0.95))
+    drop-shadow(0 0 8px rgba(var(--lily-glow-rgb), 0.5));
+}
+
+/* ============================================================== A GAVETA */
+/* "Uma gaveta que sobe de baixo, aberta por padrao quando voce ja tem uma
+   conta em andamento." O padrao vem do efeito em App.tsx; aqui esta so a
+   forma: encostada no rodape do palco, dois cantos de cima chanfrados. */
+.app-shell.hud .core-dock {
+  position: relative;
+  align-self: end;
+  justify-self: center;
+  width: min(880px, 100%);
+  background: var(--hud-panel);
+  box-shadow: inset 0 0 0 1px rgba(var(--lily-glow-rgb), var(--hud-lb));
+  clip-path: polygon(
+    var(--hud-ch) 0,
+    calc(100% - var(--hud-ch)) 0,
+    100% var(--hud-ch),
+    100% 100%,
+    0 100%,
+    0 var(--hud-ch)
+  );
+}
+
+/* Marcas de registro (ref. 18/24). Elas eram do painel do assistente, que
+   deixou de existir; sobrevivem aqui, e so nos DOIS cantos de baixo — os de
+   cima estao chanfrados e o clip cortaria a marca no meio. */
+.app-shell.hud.hud-j2 .core-dock::after,
+.app-shell.hud.hud-j3 .core-dock::after {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  z-index: 2;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(var(--lily-glow-rgb), var(--hud-lb)) 14px, transparent 14px) 0
+      100% / 100% 1px no-repeat,
+    linear-gradient(0deg, rgba(var(--lily-glow-rgb), var(--hud-lb)) 14px, transparent 14px) 0 100% /
+      1px 100% no-repeat,
+    linear-gradient(270deg, rgba(var(--lily-glow-rgb), var(--hud-lb)) 14px, transparent 14px) 100%
+      100% / 100% 1px no-repeat,
+    linear-gradient(0deg, rgba(var(--lily-glow-rgb), var(--hud-lb)) 14px, transparent 14px) 100%
+      100% / 1px 100% no-repeat;
+}
+
+.app-shell.hud .core-dock-head {
+  margin: 0;
+  font: inherit;
+}
+
+/* A alca inteira e um <button>: teclado abre e fecha a gaveta com Enter ou
+   Espaco, e o leitor de tela recebe aria-expanded. */
+.app-shell.hud .core-dock-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  width: 100%;
+  padding: 12px clamp(16px, 3vw, 26px) 13px;
   border: 0;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
-  padding: clamp(6px, 2vw, 14px) 0 clamp(10px, 2vw, 18px);
-  min-height: 0;
+  color: var(--text);
+  font-family: var(--hud-mono);
+  letter-spacing: 0;
+  text-align: left;
+  text-transform: none;
 }
 
-.app-shell.hud .lily-assistant-panel::before,
-.app-shell.hud .lily-assistant-panel::after {
+.app-shell.hud .core-dock-toggle:hover {
+  transform: none;
+  background: rgba(var(--lily-glow-rgb), 0.05);
+}
+
+/* A alca desenhada como faixa de 38px centrada, sem elemento extra. */
+.app-shell.hud .core-grab {
+  flex: 0 0 100%;
+  height: 3px;
+  margin-bottom: 8px;
+  background: linear-gradient(
+    90deg,
+    transparent calc(50% - 19px),
+    rgba(var(--lily-glow-rgb), 0.55) calc(50% - 19px) calc(50% + 19px),
+    transparent calc(50% + 19px)
+  );
+}
+
+.app-shell.hud .core-dock-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.app-shell.hud .core-dock-tag {
+  padding: 4px 9px;
+  background: rgba(var(--lily-glow-rgb), 0.08);
+  color: var(--hud-dim);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+}
+
+.app-shell.hud .core-dock-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: auto;
+  /* 10px so para ambiente: isto e o rotulo do proprio controle, nao um dado. */
+  font-size: 0.63rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--hud-dim);
+}
+
+.app-shell.hud .core-dock-hint::after {
+  content: "";
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid currentColor;
+  transition: transform 0.2s ease;
+}
+
+.app-shell.hud .core-dock.is-open .core-dock-hint::after {
+  transform: rotate(180deg);
+}
+
+.app-shell.hud .core-dock-body {
+  display: grid;
+  gap: clamp(18px, 2.6vw, 26px);
+  padding: 4px clamp(16px, 3vw, 26px) clamp(18px, 2.6vw, 24px);
+  border-top: 1px solid rgba(var(--lily-glow-rgb), var(--hud-la));
+}
+
+/* `display:grid` numa classe vence o `[hidden]{display:none}` do navegador,
+   e a gaveta nunca fecharia. Esta linha e o que faz o `hidden` valer. */
+.app-shell.hud .core-dock-body[hidden] {
   display: none;
 }
 
-.app-shell.hud .lily-orbit-stage {
-  min-height: 320px;
-  /* espelha o clamp de .lily-core para posicionar a leitura em proporção */
-  --hud-core-d: clamp(190px, 28vw, 310px);
+@keyframes coreDockRise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
-.app-shell.hud .lily-kicker {
+.app-shell.hud .core-dock.is-open .core-dock-body {
+  animation: coreDockRise 0.26s ease-out;
+}
+
+.app-shell.hud .core-dock .inputs {
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  margin-top: 16px;
+  row-gap: 30px;
+}
+
+/* ------------------------------------------------------- a linha-resumo */
+.app-shell.hud .core-sum {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 24px;
+  padding-top: clamp(13px, 2vw, 17px);
+  border-top: 1px solid rgba(var(--lily-glow-rgb), var(--hud-la));
+}
+
+.app-shell.hud .core-sum-profit {
+  display: grid;
+  gap: 3px;
+}
+
+.app-shell.hud .core-sum-profit .k {
   font-family: var(--hud-mono);
-  font-size: 0.62rem;
-  font-weight: 500;
-  letter-spacing: 0.17em;
+  font-size: 0.75rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--hud-dim);
 }
 
-/* Marcas de registro nos cantos do painel (ref. 18/24). */
-.app-shell.hud.hud-j2 > main > .lily-assistant-panel,
-.app-shell.hud.hud-j3 > main > .lily-assistant-panel {
-  position: relative;
+/* O dinheiro e a unica coisa em contraste maximo da tela. */
+.app-shell.hud .core-sum-profit strong {
+  font-family: var(--hud-mono);
+  font-size: clamp(1.5rem, 3.4vw, 2rem);
+  font-weight: 700;
+  line-height: 1;
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 20px rgba(var(--lily-glow-rgb), 0.4);
 }
 
-.app-shell.hud.hud-j2 > main > .lily-assistant-panel::before,
-.app-shell.hud.hud-j3 > main > .lily-assistant-panel::before {
-  content: "";
-  display: block;
-  position: absolute;
-  inset: 0 -6px;
-  pointer-events: none;
-  background:
-    linear-gradient(90deg, rgba(var(--lily-glow-rgb), var(--hud-lb)) 15px, transparent 15px) 0 0 /
-      100% 1px no-repeat,
-    linear-gradient(0deg, rgba(var(--lily-glow-rgb), var(--hud-lb)) 15px, transparent 15px) 0 0 /
-      1px 100% no-repeat,
-    linear-gradient(270deg, rgba(var(--lily-glow-rgb), var(--hud-lb)) 15px, transparent 15px) 100%
-      100% / 100% 1px no-repeat,
-    linear-gradient(180deg, rgba(var(--lily-glow-rgb), var(--hud-lb)) 15px, transparent 15px) 100%
-      100% / 1px 100% no-repeat;
+.app-shell.hud .core-sum-profit strong.is-empty {
+  color: var(--hud-dim);
+  text-shadow: none;
+}
+
+.app-shell.hud .core-sum-side {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+}
+
+.app-shell.hud .core-sum-side > div {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.app-shell.hud .core-sum-side dt {
+  font-family: var(--hud-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--hud-dim);
+}
+
+/* Branco, nao amarelo: venda e custo sao contexto do lucro, nao concorrentes. */
+.app-shell.hud .core-sum-side dd {
+  margin: 0;
+  font-family: var(--hud-mono);
+  font-size: 0.78rem;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.app-shell.hud .core-sum-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-left: auto;
+}
+
+/* --------------------------------------------------- os tres niveis (D2) */
+/* 1. CALCULAR cheio · 2. CADASTRAR e NOVA CONTA contornados · 3. APAGAR em
+   --danger. Sobreviveu inteiro da rodada 1, so mudou de endereco. */
+.app-shell.hud .core-go,
+.app-shell.hud .core-sum-actions .button-muted,
+.app-shell.hud .core-dock-minor button {
+  width: auto;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
+}
+
+.app-shell.hud .core-go {
+  padding: 15px 28px;
+  background: var(--primary);
+  color: #0a0b0a;
+}
+
+.app-shell.hud .core-sum-actions .button-muted {
+  padding: 15px 22px;
+  background: rgba(var(--lily-glow-rgb), 0.06);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px rgba(var(--lily-glow-rgb), var(--hud-lb));
+}
+
+.app-shell.hud .core-dock-minor {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.app-shell.hud .core-dock-minor button {
+  padding: 11px 20px;
+  font-size: 0.78rem;
+}
+
+.app-shell.hud .core-dock-minor .button-muted {
+  background: rgba(var(--lily-glow-rgb), 0.06);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px rgba(var(--lily-glow-rgb), var(--hud-lb));
+}
+
+.app-shell.hud .core-dock-minor #resetar {
+  background: rgba(255, 68, 68, 0.07);
+  color: #ff7b7b;
+  box-shadow: inset 0 0 0 1px rgba(255, 68, 68, 0.5);
+}
+
+.app-shell.hud .core-go:hover,
+.app-shell.hud .core-dock-minor button:hover,
+.app-shell.hud .core-sum-actions .button-muted:hover {
+  transform: none;
+  filter: brightness(1.12);
+}
+
+/* ------------------------------------------------------------------ foco */
+/* clip-path recorta box-shadow externo E outline: um :focus-visible normal
+   simplesmente NAO aparece num elemento chanfrado — compila, roda, nao avisa.
+   A saida e dupla: anel interno (que o clip nao corta) + drop-shadow, que
+   segue a silhueta do chanfro em vez de ser recortado por ela. */
+.app-shell.hud .core-chip:focus-visible,
+.app-shell.hud .core-go:focus-visible,
+.app-shell.hud .core-dock-minor button:focus-visible,
+.app-shell.hud .core-sum-actions .button-muted:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--primary);
+  filter: drop-shadow(0 0 2px rgba(var(--lily-glow-rgb), 0.95))
+    drop-shadow(0 0 8px rgba(var(--lily-glow-rgb), 0.5));
+}
+
+/* A alca nao tem chanfro, entao aqui o outline funciona — e e o melhor
+   indicador possivel para o controle que abre e fecha a gaveta. */
+.app-shell.hud .core-dock-toggle:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -3px;
+  background: rgba(var(--lily-glow-rgb), 0.07);
+}
+
+.app-shell.hud .core-orbit .lily-core:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 6px;
 }
 
 /* ------------------------------------------------- o núcleo como instrumento */
@@ -2976,12 +3416,6 @@ button:hover {
     inset 0 0 110px rgba(0, 0, 0, 0.86);
 }
 
-/* As duas elipses de órbita não medem nada e brigam com a grade do painel. */
-.app-shell.hud .lily-orbit-stage::before,
-.app-shell.hud .lily-orbit-stage::after {
-  display: none;
-}
-
 /* J1: um anel só. */
 .app-shell.hud.hud-j1 .hud-ticks-q,
 .app-shell.hud.hud-j1 .hud-gauge,
@@ -3075,40 +3509,6 @@ button:hover {
 .app-shell.hud > main .inputs {
   margin-top: 20px;
   row-gap: 30px;
-}
-
-/* -------------------------------------------------------------- botões */
-/* D2: quatro botões iguais viram três níveis. APAGAR deixa de ter a mesma cor
-   de NOVA CONTA. */
-.app-shell.hud > main .actions-grid button {
-  border-radius: 0;
-  box-shadow: none;
-  clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
-}
-
-.app-shell.hud > main .actions-grid button:hover {
-  transform: none;
-  filter: brightness(1.12);
-}
-
-.app-shell.hud > main .actions-grid .button-muted {
-  background: rgba(var(--lily-glow-rgb), 0.06);
-  color: var(--text);
-  box-shadow: inset 0 0 0 1px rgba(var(--lily-glow-rgb), var(--hud-lb));
-}
-
-/* CADASTRAR CONTA não tem classe nem id no JSX; é o terceiro da grade.
-   Sem isto ele fica amarelo cheio ao lado do CALCULAR — dois primários. */
-.app-shell.hud > main .actions-grid button:nth-child(3) {
-  background: rgba(var(--lily-glow-rgb), 0.06);
-  color: var(--text);
-  box-shadow: inset 0 0 0 1px rgba(var(--lily-glow-rgb), var(--hud-lb));
-}
-
-.app-shell.hud > main .actions-grid #resetar {
-  background: rgba(255, 68, 68, 0.07);
-  color: #ff7b7b;
-  box-shadow: inset 0 0 0 1px rgba(255, 68, 68, 0.5);
 }
 
 /* ------------------------------------------------------------ resultado */
@@ -3208,50 +3608,78 @@ button:hover {
     margin-left: 0;
   }
 
-  /* Ate 560px o palco vira coluna: a copy sai de position:absolute e o nucleo
-     desce. Sem isto o texto do assistente fica embaixo do nucleo. */
-  .app-shell.hud .lily-orbit-stage {
-    min-height: 0;
-    display: grid;
-    place-items: center;
-    gap: 30px;
-    padding-top: 4px;
-  }
-
-  .app-shell.hud .lily-core-copy {
-    position: static;
-    width: 100%;
-    order: -1;
-    text-align: center;
-    justify-items: center;
-  }
-
-  .app-shell.hud .lily-core-copy h2 {
-    font-size: 1.6rem;
-  }
-
-  .app-shell.hud .lily-mode-satellites {
-    position: static;
-  }
-
-  .app-shell.hud .hud-ticks {
-    inset: -14px;
-  }
-
-  .app-shell.hud .hud-ticks-q {
-    inset: -22px;
-  }
-
-  .app-shell.hud .hud-gauge {
-    inset: -32px;
-  }
-
-  .app-shell.hud .hud-brackets {
-    inset: -42px;
-  }
-
   .app-shell.hud > main .resultado .linha-strong > :last-child {
     font-size: 1.3rem;
+  }
+
+  /* "E aqui que a C brilha": o palco encosta nas bordas e a gaveta vira a
+     folha de baixo da tela, do jeito que o mockup de 390 px desenhou. */
+  .app-shell.hud > main.core-stage {
+    padding: 12px 12px 0;
+    gap: 14px;
+    min-height: calc(100vh - 178px);
+  }
+
+  .app-shell.hud .core-orbit {
+    --hud-core-d: clamp(132px, 40vw, 176px);
+  }
+
+  .app-shell.hud .core-center {
+    gap: 12px;
+  }
+
+  .app-shell.hud .core-ask {
+    font-size: 1.45rem;
+  }
+
+  /* No celular a saudacao e so o nome. A assinatura da oficina ja esta no
+     cabecalho, duas linhas acima. */
+  .app-shell.hud .core-greet-brand {
+    display: none;
+  }
+
+  .app-shell.hud .core-chip {
+    padding: 9px 13px;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+  }
+
+  .app-shell.hud .core-dock {
+    width: 100%;
+  }
+
+  .app-shell.hud .core-dock .inputs {
+    grid-template-columns: 1fr;
+    row-gap: 28px;
+  }
+
+  .app-shell.hud .core-sum {
+    gap: 12px 16px;
+  }
+
+  .app-shell.hud .core-sum-side {
+    margin-left: auto;
+    text-align: right;
+  }
+
+  .app-shell.hud .core-sum-side > div {
+    justify-content: flex-end;
+  }
+
+  .app-shell.hud .core-sum-actions {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .app-shell.hud .core-go,
+  .app-shell.hud .core-sum-actions .button-muted,
+  .app-shell.hud .core-dock-minor button {
+    flex: 1 1 140px;
+    padding: 14px 12px;
+  }
+
+  .app-shell.hud .core-dock-tag {
+    font-size: 0.68rem;
   }
 }
 
@@ -3276,6 +3704,15 @@ button:hover {
   .app-shell .lily-orbit-stage::after,
   .app-shell.hud .hud-live.is-on::before {
     animation: none !important;
+  }
+
+  .app-shell.hud .core-dock.is-open .core-dock-body {
+    animation: none;
+  }
+
+  .app-shell.hud .core-dock-hint::after,
+  .app-shell.hud .core-orbit {
+    transition: none;
   }
 
   .app-shell button:hover {

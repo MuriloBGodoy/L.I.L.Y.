@@ -438,6 +438,18 @@ const translations = {
     hudLevelVisor: "Visor",
     hudLevelCore: "Núcleo",
     hudLevelHangar: "Hangar",
+    coreGreetMorning: "Bom dia",
+    coreGreetAfternoon: "Boa tarde",
+    coreGreetEvening: "Boa noite",
+    coreAsk: "No que a gente trabalha agora?",
+    coreChipCalc: "Calcular um serviço",
+    coreChipNewAccount: "Nova conta",
+    coreChipAccounts: "Ver contas cadastradas",
+    coreChipVoice: "Falar por voz",
+    coreDockTitle: "Cálculo do serviço",
+    coreDockOpen: "abrir",
+    coreDockClose: "fechar",
+    coreDockNoAccount: "sem conta aberta",
     initialValue: "Valor Inicial (R$)",
     freight: "Frete (R$)",
     employee: "Funcionário (R$)",
@@ -680,6 +692,18 @@ const translations = {
     hudLevelVisor: "Visor",
     hudLevelCore: "Core",
     hudLevelHangar: "Hangar",
+    coreGreetMorning: "Good morning",
+    coreGreetAfternoon: "Good afternoon",
+    coreGreetEvening: "Good evening",
+    coreAsk: "What are we working on?",
+    coreChipCalc: "Calculate a service",
+    coreChipNewAccount: "New account",
+    coreChipAccounts: "See saved accounts",
+    coreChipVoice: "Talk by voice",
+    coreDockTitle: "Service calculation",
+    coreDockOpen: "open",
+    coreDockClose: "close",
+    coreDockNoAccount: "no account open",
     initialValue: "Initial Value (R$)",
     freight: "Freight (R$)",
     employee: "Employee (R$)",
@@ -1064,6 +1088,14 @@ function App() {
   );
   const [mainInputs, setMainInputs] = useState<MainInputs>(defaultMainInputs);
   const [results, setResults] = useState<Results | null>(null);
+  /**
+   * A gaveta da Direcao C. Nao nasce aberta: ela ABRE sozinha assim que existe
+   * conta em andamento (ver o efeito mais abaixo). Fechada de proposito quando
+   * a tela esta limpa — e o palco que manda, nao a calculadora.
+   */
+  const [dockOpen, setDockOpen] = useState(false);
+  /** Pedido pendente de foco no primeiro campo, consumido depois do commit. */
+  const dockFocusPendingRef = useRef(false);
   const [accountModalOpen, setAccountModalOpen] = useState(false);
   const [accountForm, setAccountForm] = useState<AccountForm>(defaultAccountForm);
   const [accountImagePreview, setAccountImagePreview] = useState("");
@@ -1146,6 +1178,35 @@ function App() {
    */
   const hudMargin =
     results && results.venda > 0 ? (results.lucro / results.venda) * 100 : null;
+  const hudMarginLabel =
+    hudMargin === null
+      ? "--"
+      : `${hudMargin.toLocaleString("pt-BR", {
+          minimumFractionDigits: 1,
+          maximumFractionDigits: 1,
+        })}%`;
+  /**
+   * "Conta em andamento" = o que faz a gaveta nascer aberta. Tres origens:
+   * conta escolhida na sidebar, resultado ja calculado, ou campo digitado.
+   */
+  const hasWorkInProgress =
+    selectedAccountId !== null ||
+    results !== null ||
+    Object.values(mainInputs).some((value) => value.trim() !== "");
+  const greetingKey = (() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "coreGreetMorning" as const;
+    if (hour < 18) return "coreGreetAfternoon" as const;
+    return "coreGreetEvening" as const;
+  })();
+  /** Primeiro nome. Se o login for so e-mail, corta no @ em vez de gritar. */
+  const firstName = (displayName.includes("@")
+    ? displayName.split("@")[0]
+    : displayName
+  )
+    .trim()
+    .split(/\s+/)[0];
+  const greetingLine = `${t(greetingKey)}, ${firstName}`;
   const lilyCoreStateClass = [
     "lily-core",
     lilyVoiceStatus === "active" ? "is-listening" : "",
@@ -1170,6 +1231,25 @@ function App() {
       setToasts((prev) => prev.filter((toast) => toast.id !== id));
     }, 4200);
   }
+
+  /**
+   * "Aberta por padrao quando ja existe conta em andamento" (Direcao C).
+   * So ABRE — nunca fecha sozinha: fechar a gaveta debaixo da mao de quem
+   * acabou de apagar os campos seria arrancar a tela do usuario.
+   */
+  useEffect(() => {
+    if (hasWorkInProgress) setDockOpen(true);
+  }, [hasWorkInProgress]);
+
+  /**
+   * O foco tem que esperar o commit: enquanto a gaveta esta fechada o corpo
+   * dela vai com `hidden`, e elemento escondido nao aceita foco.
+   */
+  useEffect(() => {
+    if (!dockOpen || !dockFocusPendingRef.current) return;
+    dockFocusPendingRef.current = false;
+    document.getElementById("vInicial")?.focus();
+  }, [dockOpen]);
 
   useEffect(() => {
     localStorage.setItem("configLily", JSON.stringify(config));
@@ -1350,6 +1430,20 @@ function App() {
         mapFirebaseAccount(accountDoc.id, accountDoc.data() as Record<string, unknown>),
       ),
     );
+  }
+
+  /**
+   * Chip "Calcular um servico": abre a gaveta e ja poe o cursor no primeiro
+   * campo. Se ela ja estava aberta, o efeito nao roda de novo — entao o foco
+   * vai aqui mesmo.
+   */
+  function handleOpenCalcDock() {
+    if (dockOpen) {
+      document.getElementById("vInicial")?.focus();
+      return;
+    }
+    dockFocusPendingRef.current = true;
+    setDockOpen(true);
   }
 
   function handleCalculate() {
@@ -2274,6 +2368,29 @@ function App() {
   });
 
   const selectedAccount = accounts.find((account) => account.id === selectedAccountId);
+  /**
+   * Etiqueta da gaveta: a conta aberta, ou o aviso de que nao ha nenhuma.
+   * A marca so entra quando ela ja nao esta dentro do nome do veiculo — senao
+   * a etiqueta sai "Scania P360 · Scania", que foi o que apareceu no teste.
+   */
+  const dockTag =
+    [
+      selectedAccount?.veiculo,
+      selectedAccount?.marca &&
+      !selectedAccount.veiculo
+        ?.toLowerCase()
+        .includes(selectedAccount.marca.toLowerCase())
+        ? selectedAccount.marca
+        : "",
+    ]
+      .filter(Boolean)
+      .join(" · ") || t("coreDockNoAccount");
+  /** Linhas que a linha-resumo da gaveta nao cobre. Sem elas, sem telemetria. */
+  const hasExtraResultRows = Boolean(
+    selectedAccount?.vendidoPor ||
+      selectedAccount?.maoDeObra ||
+      (isBlueMode && results?.montagem !== undefined),
+  );
   const accountModalTitle = selectedAccount ? t("editAccount") : t("registerAccount");
   const accountSaveLabel = selectedAccount ? t("update") : t("confirm");
 
@@ -3072,20 +3189,23 @@ function App() {
             </div>
           </div>
 
-          <main>
-            <section
-              className={
-                lilyAssistantOpen
-                  ? "lily-assistant-panel is-open"
-                  : "lily-assistant-panel"
-              }
-              aria-label={t("lilyAssistantTitle")}
-            >
-              <div className="lily-orbit-stage">
+          {/*
+           * PALCO (Direcao C). O nucleo NAO mora dentro de um card: ele e a
+           * fonte de luz da tela. Saudacao + pergunta + chips ficam sob ele, e
+           * a calculadora vive na gaveta la embaixo. A pele JARVIS (grade,
+           * scanlines, mono, chanfro) veste esta estrutura — nao a substitui.
+           */}
+          <main
+            className={dockOpen ? "core-stage is-dock-open" : "core-stage"}
+          >
+            <div className="core-center">
+              <div className="core-orbit">
                 <button
                   type="button"
                   className={lilyCoreStateClass}
                   aria-label={t("lilyCoreLabel")}
+                  title={t("lilyCoreHint")}
+                  aria-expanded={lilyAssistantOpen}
                   onClick={() => setLilyAssistantOpen((prev) => !prev)}
                 >
                   <span className="lily-core-ring ring-one" />
@@ -3110,244 +3230,327 @@ function App() {
                 </button>
 
                 <div className="hud-read" aria-live="polite">
-                  <strong>
-                    {hudMargin === null
-                      ? "--"
-                      : `${hudMargin.toLocaleString("pt-BR", {
-                          minimumFractionDigits: 1,
-                          maximumFractionDigits: 1,
-                        })}%`}
-                  </strong>
+                  <strong>{hudMarginLabel}</strong>
                   <span>{hudMargin === null ? t("hudNoData") : t("hudMargin")}</span>
                 </div>
-
-                <div className="lily-core-copy">
-                  <span className="lily-kicker">{t("lilyCoreLabel")}</span>
-                  <h2>{t("lilyAssistantTitle")}</h2>
-                  <p>{t("lilyCoreHint")}</p>
-                </div>
-
-                <div
-                  className={`lily-voice-status lily-voice-${lilyVoiceStatus}`}
-                  aria-live="polite"
-                >
-                  <span>{t("lilyVoice")}</span>
-                  <strong>{lilyVoiceLabel}</strong>
-                </div>
-
-                {lilyAssistantOpen && (
-                  <div className="lily-mode-satellites" aria-label={t("lilyChooseMode")}>
-                    <button
-                      type="button"
-                      className={
-                        lilyAssistantMode === "voice"
-                          ? "lily-mini is-active"
-                          : "lily-mini"
-                      }
-                      onClick={() => setLilyAssistantMode("voice")}
-                    >
-                      <span className="lily-mini-orb">V</span>
-                      <strong>{t("lilyVoiceMode")}</strong>
-                    </button>
-                    <button
-                      type="button"
-                      className={
-                        lilyAssistantMode === "chat"
-                          ? "lily-mini is-active"
-                          : "lily-mini"
-                      }
-                      onClick={() => setLilyAssistantMode("chat")}
-                    >
-                      <span className="lily-mini-orb">M</span>
-                      <strong>{t("lilyMessageMode")}</strong>
-                    </button>
-                  </div>
-                )}
               </div>
 
-              {lilyAssistantOpen && lilyAssistantMode === "voice" && (
-                <div className="lily-voice-console">
-                  <div>
-                    <span className="lily-kicker">{t("lilyVoiceMode")}</span>
-                    <h3>{lilyVoiceLabel}</h3>
-                    <p>
-                      {isTauriRuntime
-                        ? t("lilyVoiceHintActive")
-                        : t("lilyVoiceWebHint")}
-                    </p>
-                  </div>
+              <p className="core-greet">
+                {greetingLine}
+                <span className="core-greet-brand"> · {t("appSubtitle")}</span>
+              </p>
+              <h2 className="core-ask">{t("coreAsk")}</h2>
+
+              <div className="core-chips">
+                <button
+                  type="button"
+                  className="core-chip is-hot"
+                  onClick={handleOpenCalcDock}
+                >
+                  {t("coreChipCalc")}
+                </button>
+                <button
+                  type="button"
+                  className="core-chip"
+                  onClick={() => {
+                    handleNewAccount();
+                    handleOpenCalcDock();
+                  }}
+                >
+                  {t("coreChipNewAccount")}
+                </button>
+                <button
+                  type="button"
+                  className="core-chip"
+                  onClick={() => setView("accounts")}
+                >
+                  {t("coreChipAccounts")}
+                </button>
+                <button
+                  type="button"
+                  className={
+                    lilyAssistantOpen && lilyAssistantMode === "voice"
+                      ? "core-chip is-on"
+                      : "core-chip"
+                  }
+                  onClick={() => {
+                    setLilyAssistantMode("voice");
+                    setLilyAssistantOpen(true);
+                  }}
+                >
+                  {t("coreChipVoice")}
+                </button>
+              </div>
+            </div>
+
+            {/* O assistente sobe sobre o palco, so quando chamado. */}
+            {lilyAssistantOpen && (
+              <section className="core-assistant" aria-label={t("lilyAssistantTitle")}>
+                <div className="lily-mode-satellites" aria-label={t("lilyChooseMode")}>
                   <button
                     type="button"
                     className={
-                      lilyVoiceStatus === "active"
-                        ? "button-muted"
-                        : "lily-primary-action"
+                      lilyAssistantMode === "voice" ? "lily-mini is-active" : "lily-mini"
                     }
-                    disabled={
-                      lilyVoiceStatus === "starting" || lilyVoiceStatus === "stopping"
-                    }
-                    onClick={() => void handleToggleLilyVoice()}
+                    onClick={() => setLilyAssistantMode("voice")}
                   >
-                    {lilyVoiceStatus === "active"
-                      ? t("lilyVoiceStop")
-                      : t("lilyVoiceStart")}
+                    <span className="lily-mini-orb">V</span>
+                    <strong>{t("lilyVoiceMode")}</strong>
+                  </button>
+                  <button
+                    type="button"
+                    className={
+                      lilyAssistantMode === "chat" ? "lily-mini is-active" : "lily-mini"
+                    }
+                    onClick={() => setLilyAssistantMode("chat")}
+                  >
+                    <span className="lily-mini-orb">M</span>
+                    <strong>{t("lilyMessageMode")}</strong>
                   </button>
                 </div>
-              )}
 
-              {lilyAssistantOpen && lilyAssistantMode === "chat" && (
-                <div className="lily-chat-card">
-                  <div className="lily-chat-log" aria-live="polite">
-                    {lilyChatMessages.map((message) => (
-                      <div
-                        key={message.id}
-                        className={`lily-chat-message lily-chat-${message.author}`}
-                      >
-                        <span>{message.author === "lily" ? "L.I.L.Y" : displayName}</span>
-                        <p>{message.text}</p>
-                      </div>
-                    ))}
-                    {lilyChatBusy && (
-                      <div className="lily-chat-message lily-chat-lily">
-                        <span>L.I.L.Y</span>
-                        <p>{t("lilyChatThinking")}</p>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="lily-chat-input">
-                    <input
-                      type="text"
-                      value={lilyChatInput}
-                      placeholder={t("lilyChatPlaceholder")}
-                      onChange={(event) => setLilyChatInput(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          event.preventDefault();
-                          void handleSendLilyChat();
-                        }
-                      }}
-                    />
+                {lilyAssistantMode === "voice" && (
+                  <div className="lily-voice-console">
+                    <div>
+                      <span className="lily-kicker">{t("lilyVoiceMode")}</span>
+                      <h3>{lilyVoiceLabel}</h3>
+                      <p>
+                        {isTauriRuntime
+                          ? t("lilyVoiceHintActive")
+                          : t("lilyVoiceWebHint")}
+                      </p>
+                    </div>
                     <button
                       type="button"
-                      disabled={lilyChatBusy || !lilyChatInput.trim()}
-                      onClick={() => void handleSendLilyChat()}
+                      className={
+                        lilyVoiceStatus === "active"
+                          ? "button-muted"
+                          : "lily-primary-action"
+                      }
+                      disabled={
+                        lilyVoiceStatus === "starting" || lilyVoiceStatus === "stopping"
+                      }
+                      onClick={() => void handleToggleLilyVoice()}
                     >
-                      {t("lilyChatSend")}
+                      {lilyVoiceStatus === "active"
+                        ? t("lilyVoiceStop")
+                        : t("lilyVoiceStart")}
+                    </button>
+                  </div>
+                )}
+
+                {lilyAssistantMode === "chat" && (
+                  <div className="lily-chat-card">
+                    <div className="lily-chat-log" aria-live="polite">
+                      {lilyChatMessages.map((message) => (
+                        <div
+                          key={message.id}
+                          className={`lily-chat-message lily-chat-${message.author}`}
+                        >
+                          <span>
+                            {message.author === "lily" ? "L.I.L.Y" : displayName}
+                          </span>
+                          <p>{message.text}</p>
+                        </div>
+                      ))}
+                      {lilyChatBusy && (
+                        <div className="lily-chat-message lily-chat-lily">
+                          <span>L.I.L.Y</span>
+                          <p>{t("lilyChatThinking")}</p>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="lily-chat-input">
+                      <input
+                        type="text"
+                        value={lilyChatInput}
+                        placeholder={t("lilyChatPlaceholder")}
+                        onChange={(event) => setLilyChatInput(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            void handleSendLilyChat();
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        disabled={lilyChatBusy || !lilyChatInput.trim()}
+                        onClick={() => void handleSendLilyChat()}
+                      >
+                        {t("lilyChatSend")}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </section>
+            )}
+
+            {/*
+             * A GAVETA. Aberta por padrao quando ja existe conta em andamento
+             * (conta selecionada, resultado na tela ou campo preenchido) — e o
+             * estado central da Direcao C. Fechada, sobra a alca: um clique
+             * para calcular, o custo que ele aceitou ao escolher a C.
+             */}
+            <section
+              className={dockOpen ? "core-dock is-open" : "core-dock"}
+              aria-label={t("coreDockTitle")}
+            >
+              <h2 className="core-dock-head">
+                <button
+                  type="button"
+                  className="core-dock-toggle"
+                  aria-expanded={dockOpen}
+                  aria-controls="core-dock-body"
+                  onClick={() => setDockOpen((prev) => !prev)}
+                >
+                  <span className="core-grab" aria-hidden="true" />
+                  <span className="core-dock-title">{t("coreDockTitle")}</span>
+                  <span className="core-dock-tag">{dockTag}</span>
+                  <span className="core-dock-hint">
+                    {dockOpen ? t("coreDockClose") : t("coreDockOpen")}
+                  </span>
+                </button>
+              </h2>
+
+              <div className="core-dock-body" id="core-dock-body" hidden={!dockOpen}>
+                <div className="inputs">
+                  <FloatingInput
+                    id="vInicial"
+                    label={t("initialValue")}
+                    value={mainInputs.vInicial}
+                    onChange={(value) =>
+                      setMainInputs((prev) => ({ ...prev, vInicial: value }))
+                    }
+                  />
+                  <FloatingInput
+                    id="frete"
+                    label={t("freight")}
+                    value={mainInputs.frete}
+                    onChange={(value) =>
+                      setMainInputs((prev) => ({ ...prev, frete: value }))
+                    }
+                  />
+                  <FloatingInput
+                    id="func"
+                    label={t("employee")}
+                    value={mainInputs.func}
+                    onChange={(value) =>
+                      setMainInputs((prev) => ({ ...prev, func: value }))
+                    }
+                  />
+                  {isBlueMode && (
+                    <>
+                      <FloatingInput
+                        id="material"
+                        label={t("material")}
+                        value={mainInputs.material}
+                        onChange={(value) =>
+                          setMainInputs((prev) => ({ ...prev, material: value }))
+                        }
+                      />
+                      <FloatingInput
+                        id="horas"
+                        label={t("serviceHours")}
+                        value={mainInputs.horas}
+                        onChange={(value) =>
+                          setMainInputs((prev) => ({ ...prev, horas: value }))
+                        }
+                      />
+                      <FloatingInput
+                        id="inss"
+                        label="INSS (R$)"
+                        value={mainInputs.inss}
+                        onChange={(value) =>
+                          setMainInputs((prev) => ({ ...prev, inss: value }))
+                        }
+                      />
+                    </>
+                  )}
+                </div>
+
+                {/* Linha-resumo da C: o lucro grande, venda e custo ao lado, e
+                    as duas acoes que fecham o fluxo. */}
+                <div className="core-sum">
+                  <div className="core-sum-profit">
+                    <span className="k">{t("finalProfit")}</span>
+                    <strong
+                      className={results ? undefined : "is-empty"}
+                      aria-live="polite"
+                    >
+                      {results ? formatCurrency(results.lucro) : "—"}
+                    </strong>
+                  </div>
+                  <dl className="core-sum-side">
+                    <div>
+                      <dt>{t("sellFor")}</dt>
+                      <dd>{results ? formatCurrency(results.venda) : "—"}</dd>
+                    </div>
+                    <div>
+                      <dt>{t("cost")}</dt>
+                      <dd>{results ? formatCurrency(results.custo) : "—"}</dd>
+                    </div>
+                  </dl>
+                  <div className="core-sum-actions">
+                    <button className="core-go" onClick={handleCalculate}>
+                      {t("calculate")}
+                    </button>
+                    <button
+                      className="button-muted"
+                      onClick={() => setAccountModalOpen(true)}
+                    >
+                      {selectedAccount ? t("editAccount") : t("registerAccount")}
                     </button>
                   </div>
                 </div>
-              )}
-            </section>
 
-            <div className="inputs">
-              <FloatingInput
-                id="vInicial"
-                label={t("initialValue")}
-                value={mainInputs.vInicial}
-                onChange={(value) =>
-                  setMainInputs((prev) => ({ ...prev, vInicial: value }))
-                }
-              />
-              <FloatingInput
-                id="frete"
-                label={t("freight")}
-                value={mainInputs.frete}
-                onChange={(value) =>
-                  setMainInputs((prev) => ({ ...prev, frete: value }))
-                }
-              />
-              <FloatingInput
-                id="func"
-                label={t("employee")}
-                value={mainInputs.func}
-                onChange={(value) =>
-                  setMainInputs((prev) => ({ ...prev, func: value }))
-                }
-              />
-              {isBlueMode && (
-                <>
-                  <FloatingInput
-                    id="material"
-                    label={t("material")}
-                    value={mainInputs.material}
-                    onChange={(value) =>
-                      setMainInputs((prev) => ({ ...prev, material: value }))
-                    }
-                  />
-                  <FloatingInput
-                    id="horas"
-                    label={t("serviceHours")}
-                    value={mainInputs.horas}
-                    onChange={(value) =>
-                      setMainInputs((prev) => ({ ...prev, horas: value }))
-                    }
-                  />
-                  <FloatingInput
-                    id="inss"
-                    label="INSS (R$)"
-                    value={mainInputs.inss}
-                    onChange={(value) =>
-                      setMainInputs((prev) => ({ ...prev, inss: value }))
-                    }
-                  />
-                </>
-              )}
-            </div>
+                {/* Telemetria: so o que NAO cabe na linha-resumo. */}
+                {results && hasExtraResultRows && (
+                  <div className="resultado">
+                    <h3>{isBlueMode ? t("blueResult") : t("yellowResult")}</h3>
+                    {selectedAccount?.vendidoPor && (
+                      <ResultRow
+                        label={t("soldFor")}
+                        value={formatCurrency(toNumber(selectedAccount.vendidoPor))}
+                      />
+                    )}
+                    {selectedAccount?.maoDeObra && (
+                      <ResultRow
+                        label={t("labor")}
+                        value={formatCurrency(toNumber(selectedAccount.maoDeObra))}
+                      />
+                    )}
+                    {isBlueMode && results.montagem !== undefined && (
+                      <>
+                        <ResultRow
+                          label={t("assembly")}
+                          value={formatCurrency(results.montagem)}
+                        />
+                        <ResultRow
+                          label={t("coreAssembly")}
+                          value={formatCurrency(results.cm ?? 0)}
+                        />
+                        <ResultRow
+                          label={t("assemblySale")}
+                          value={formatCurrency(results.mv ?? 0)}
+                        />
+                      </>
+                    )}
+                  </div>
+                )}
 
-            <div className="actions-grid">
-              <button onClick={handleCalculate}>{t("calculate")}</button>
-              <button className="button-muted" onClick={handleNewAccount}>
-                {t("newAccount")}
-              </button>
-              <button onClick={() => setAccountModalOpen(true)}>
-                {selectedAccount ? t("editAccount") : t("registerAccount")}
-              </button>
-              <button id="resetar" onClick={handleReset}>
-                {t("clear")}
-              </button>
-            </div>
-
-            {results && (
-              <div className="resultado">
-                <h3>{isBlueMode ? t("blueResult") : t("yellowResult")}</h3>
-                <ResultRow label={t("sellFor")} value={formatCurrency(results.venda)} />
-                {selectedAccount?.vendidoPor && (
-                  <ResultRow
-                    label={t("soldFor")}
-                    value={formatCurrency(toNumber(selectedAccount.vendidoPor))}
-                  />
-                )}
-                {selectedAccount?.maoDeObra && (
-                  <ResultRow
-                    label={t("labor")}
-                    value={formatCurrency(toNumber(selectedAccount.maoDeObra))}
-                  />
-                )}
-                <ResultRow label={t("cost")} value={formatCurrency(results.custo)} />
-                <ResultRow
-                  label={t("finalProfit")}
-                  value={formatCurrency(results.lucro)}
-                  strong
-                />
-                {isBlueMode && results.montagem !== undefined && (
-                  <>
-                    <ResultRow
-                      label={t("assembly")}
-                      value={formatCurrency(results.montagem)}
-                    />
-                    <ResultRow
-                      label={t("coreAssembly")}
-                      value={formatCurrency(results.cm ?? 0)}
-                    />
-                    <ResultRow
-                      label={t("assemblySale")}
-                      value={formatCurrency(results.mv ?? 0)}
-                    />
-                  </>
-                )}
+                {/* Terceiro nivel: manutencao, longe do CALCULAR. */}
+                <div className="core-dock-minor">
+                  <button className="button-muted" onClick={handleNewAccount}>
+                    {t("newAccount")}
+                  </button>
+                  <button id="resetar" onClick={handleReset}>
+                    {t("clear")}
+                  </button>
+                </div>
               </div>
-            )}
+            </section>
           </main>
         </>
       )}
