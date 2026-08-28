@@ -5,3 +5,4 @@ service-account*.json
 /lily/lily-app/.env
 firebase-debug.log
 __pycache__/
+/ui designs/

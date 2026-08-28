@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Montserrat:wght@400;600;700&display=swap");
 
 :root {
   --primary: #ffd600;
@@ -2483,5 +2483,807 @@ button:hover {
     left: 12px;
     right: auto;
     text-align: left;
+  }
+}
+
+/* ============================================================================
+   PELE HUD ("JARVIS") — home apenas · rodada 2 de 2026-08-27
+   Protótipo: ui designs/2026-08-27-home-page/prototipo-jarvis.html
+   Intensidade implementada como padrão: J2 "Núcleo".
+
+   COMO TROCAR A INTENSIDADE
+   -------------------------
+   É uma classe no shell: `.app-shell.hud.hud-j1 | .hud-j2 | .hud-j3`.
+   Ela vem de `config.hudLevel` (App.tsx), persistido junto do resto do config,
+   e há um seletor na faixa de status da home. Para mudar o padrão de fábrica,
+   `defaultConfig.hudLevel` em App.tsx. Nenhuma outra tela consulta isso.
+
+   AS DUAS REGRAS QUE NÃO PODEM SER QUEBRADAS
+   ------------------------------------------
+   1. Nenhum hex de acento aqui dentro. Só var(--primary) e
+      rgba(var(--lily-glow-rgb), a) — é isso que faz a pele nascer funcionando
+      no tema amarelo e no `.app-shell.azul` sem uma linha a mais.
+   2. `isBlueMode` é regra de NEGÓCIO (formula do cálculo, campos, filtro de
+      contas). A pele NÃO se pendura nele. `.azul` aqui só ajusta os alphas,
+      porque #00ced1 é 28% mais escuro que #ffd600 e o mesmo alpha rende menos
+      contraste — medido, não estimado.
+
+   A CONTA DE LEGIBILIDADE (WCAG 2.1, sobre o fundo do painel)
+   ------------------------------------------------------------
+   amarelo cheio 13,96:1 · ciano cheio 10,09:1 · #0a0b0a sobre amarelo 13,96:1
+   amarelo 30% (hairline de cinema) 2,16:1 — REPROVA como borda
+   amarelo 45% 3,49:1 passa como borda · ciano 45% 2,78:1 REPROVA
+   Pisos: amarelo borda 41% / texto 54% · ciano borda 48% / texto 64%.
+   Daí --hud-la/--hud-lb serem maiores no `.azul`.
+   Consequência prática: nenhuma hairline pode ser a única coisa separando dois
+   campos. Por isso os inputs têm FUNDO preenchido além do contorno. Se alguém
+   tirar o preenchimento depois, a tela quebra em silêncio.
+   ========================================================================== */
+
+.app-shell.hud {
+  --hud-la: 0.3; /* linha decorativa */
+  --hud-lb: 0.45; /* linha estrutural */
+  --hud-bg: #0a0b0a;
+  --hud-panel: #101210;
+  --hud-panel-2: #141610;
+  --hud-dim: #9aa096; /* 7,37:1 sobre o fundo — passa como texto */
+  --hud-ch: 16px; /* chanfro dos painéis */
+  --hud-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  background: var(--hud-bg);
+}
+
+.app-shell.hud.azul {
+  --hud-la: 0.37;
+  --hud-lb: 0.52;
+}
+
+/* Chanfro reutilizável: dois cantos cortados, nunca quatro (ref. 16). */
+.app-shell.hud .hud-ch {
+  clip-path: polygon(
+    var(--hud-ch) 0,
+    100% 0,
+    100% calc(100% - var(--hud-ch)),
+    calc(100% - var(--hud-ch)) 100%,
+    0 100%,
+    0 var(--hud-ch)
+  );
+}
+
+/* ---------------------------------------------------------------- cabeçalho */
+/* Some a faixa amarela literal do `header` original
+   (linear-gradient(90deg,#181818 60%,var(--primary))): amarelo é fonte de luz,
+   não superfície. */
+.app-shell.hud > header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px 24px;
+  /* .hamburger (fixed, 45px, esquerda) e .user-menu (fixed, direita) flutuam
+     por cima. O header abre espaço para os dois em vez de disputar. */
+  padding: 18px clamp(180px, 26vw, 380px) 16px 72px;
+  text-align: left;
+  background: linear-gradient(180deg, #0e100e, var(--hud-bg));
+  border-bottom: 1px solid rgba(var(--lily-glow-rgb), var(--hud-la));
+}
+
+.app-shell.hud > header .hud-brand {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.app-shell.hud > header h1 {
+  font-size: clamp(1.4rem, 3.4vw, 1.85rem);
+  letter-spacing: 0.06em;
+}
+
+.app-shell.hud > header p {
+  margin: 0;
+  font-family: var(--hud-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--hud-dim);
+}
+
+/* ------------------------------------------- segmento amarela / azul (D3) */
+.app-shell.hud .hud-seg {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.app-shell.hud .hud-seg-label,
+.app-shell.hud .hud-strip-item {
+  font-family: var(--hud-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+  color: var(--hud-dim);
+}
+
+.app-shell.hud .hud-seg-track {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  padding: 1px;
+  background: rgba(var(--lily-glow-rgb), 0.1);
+}
+
+.app-shell.hud .hud-seg-track button {
+  width: auto;
+  padding: 7px 13px;
+  border: 0;
+  border-radius: 0;
+  background: var(--hud-panel);
+  box-shadow: none;
+  color: var(--hud-dim);
+  font-family: var(--hud-mono);
+  font-size: 0.63rem;
+  font-weight: 500;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* Célula preenchida em vez de contorno fino (ref. 22): o estado ativo é um
+   bloco sólido a 13,96:1, não uma linha. */
+.app-shell.hud .hud-seg-track button.is-on {
+  background: var(--primary);
+  color: #0a0b0a;
+  font-weight: 700;
+}
+
+.app-shell.hud .hud-seg-track button:hover {
+  transform: none;
+  color: var(--primary);
+}
+
+.app-shell.hud .hud-seg-track button.is-on:hover {
+  color: #0a0b0a;
+}
+
+/* ------------------------------------------------------- faixa de status */
+.app-shell.hud > .hud-strip {
+  width: min(1200px, calc(100vw - 40px));
+  margin: 16px auto -4px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 22px;
+  font-family: var(--hud-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+  color: var(--hud-dim);
+}
+
+.app-shell.hud .hud-strip b {
+  color: var(--primary);
+  font-weight: 500;
+}
+
+.app-shell.hud .hud-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--hud-dim);
+}
+
+.app-shell.hud .hud-live::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #4a4f46;
+}
+
+.app-shell.hud .hud-live.is-on {
+  color: var(--primary);
+}
+
+.app-shell.hud .hud-live.is-on::before {
+  background: var(--primary);
+  box-shadow: 0 0 8px var(--primary);
+  animation: hudBlip 2.6s ease-in-out infinite;
+}
+
+.app-shell.hud .hud-levels {
+  margin-left: auto;
+}
+
+@keyframes hudBlip {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.28;
+  }
+}
+
+/* ------------------------------------------------------------ painel main */
+.app-shell.hud > main {
+  position: relative;
+  isolation: isolate;
+  border: 0;
+  border-radius: 0;
+  background: var(--hud-panel);
+  box-shadow: inset 0 0 0 1px rgba(var(--lily-glow-rgb), var(--hud-lb));
+  clip-path: polygon(
+    var(--hud-ch) 0,
+    100% 0,
+    100% calc(100% - var(--hud-ch)),
+    calc(100% - var(--hud-ch)) 100%,
+    0 100%,
+    0 var(--hud-ch)
+  );
+}
+
+/* grade + scanlines + bloom: fundo, nunca estrutura (1,67:1 e 2,16:1 — não
+   separam nada, e é justamente por isso que podem existir). */
+.app-shell.hud > main::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(var(--lily-glow-rgb), 0.055) 1px, transparent 1px) 0 0 /
+      68px 68px,
+    linear-gradient(0deg, rgba(var(--lily-glow-rgb), 0.035) 1px, transparent 1px) 0 0 /
+      68px 68px,
+    radial-gradient(46% 42% at 50% 22%, rgba(var(--lily-glow-rgb), 0.11), transparent 70%);
+}
+
+.app-shell.hud > main::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0 2px,
+    rgba(var(--lily-glow-rgb), 0.045) 3px 4px
+  );
+  mix-blend-mode: screen;
+  opacity: 0.5;
+}
+
+/* J1 Visor: sem grade, sem scanlines. */
+.app-shell.hud.hud-j1 > main::before {
+  background: radial-gradient(
+    46% 42% at 50% 22%,
+    rgba(var(--lily-glow-rgb), 0.11),
+    transparent 70%
+  );
+}
+
+.app-shell.hud.hud-j1 > main::after {
+  display: none;
+}
+
+/* J3 Hangar: retículo atravessando o painel + bloom forte. */
+.app-shell.hud.hud-j3 > main::before {
+  background:
+    /* retículo: uma camada de 1px de largura posicionada em 50%, não um
+       gradiente de 1px dentro de uma camada de largura inteira — esse desenha
+       a linha na borda esquerda e some do centro. */
+    linear-gradient(
+        rgba(var(--lily-glow-rgb), 0.13),
+        rgba(var(--lily-glow-rgb), 0.13)
+      )
+      50% 0 / 1px 100% no-repeat,
+    linear-gradient(
+        rgba(var(--lily-glow-rgb), 0.13),
+        rgba(var(--lily-glow-rgb), 0.13)
+      )
+      0 34% / 100% 1px no-repeat,
+    linear-gradient(90deg, rgba(var(--lily-glow-rgb), 0.055) 1px, transparent 1px) 0 0 /
+      68px 68px,
+    linear-gradient(0deg, rgba(var(--lily-glow-rgb), 0.035) 1px, transparent 1px) 0 0 /
+      68px 68px,
+    radial-gradient(52% 48% at 50% 22%, rgba(var(--lily-glow-rgb), 0.2), transparent 72%),
+    radial-gradient(70% 40% at 50% 100%, rgba(var(--lily-secondary-rgb), 0.07), transparent 70%);
+}
+
+/* -------------------------------------------------- painel do assistente */
+/* O painel já era um HUD dentro de uma caixa. Aqui ele deixa de ser caixa e
+   passa a iluminar o painel inteiro (ref. 05 da rodada 1, ref. 13 desta). */
+.app-shell.hud .lily-assistant-panel {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: clamp(6px, 2vw, 14px) 0 clamp(10px, 2vw, 18px);
+  min-height: 0;
+}
+
+.app-shell.hud .lily-assistant-panel::before,
+.app-shell.hud .lily-assistant-panel::after {
+  display: none;
+}
+
+.app-shell.hud .lily-orbit-stage {
+  min-height: 320px;
+  /* espelha o clamp de .lily-core para posicionar a leitura em proporção */
+  --hud-core-d: clamp(190px, 28vw, 310px);
+}
+
+.app-shell.hud .lily-kicker {
+  font-family: var(--hud-mono);
+  font-size: 0.62rem;
+  font-weight: 500;
+  letter-spacing: 0.17em;
+}
+
+/* Marcas de registro nos cantos do painel (ref. 18/24). */
+.app-shell.hud.hud-j2 > main > .lily-assistant-panel,
+.app-shell.hud.hud-j3 > main > .lily-assistant-panel {
+  position: relative;
+}
+
+.app-shell.hud.hud-j2 > main > .lily-assistant-panel::before,
+.app-shell.hud.hud-j3 > main > .lily-assistant-panel::before {
+  content: "";
+  display: block;
+  position: absolute;
+  inset: 0 -6px;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(var(--lily-glow-rgb), var(--hud-lb)) 15px, transparent 15px) 0 0 /
+      100% 1px no-repeat,
+    linear-gradient(0deg, rgba(var(--lily-glow-rgb), var(--hud-lb)) 15px, transparent 15px) 0 0 /
+      1px 100% no-repeat,
+    linear-gradient(270deg, rgba(var(--lily-glow-rgb), var(--hud-lb)) 15px, transparent 15px) 100%
+      100% / 100% 1px no-repeat,
+    linear-gradient(180deg, rgba(var(--lily-glow-rgb), var(--hud-lb)) 15px, transparent 15px) 100%
+      100% / 1px 100% no-repeat;
+}
+
+/* ------------------------------------------------- o núcleo como instrumento */
+/* O anel externo não gira à toa: ele MEDE a margem (--hud-p). É a única
+   leitura do app que não existia em lugar nenhum antes. */
+.app-shell.hud .hud-ticks,
+.app-shell.hud .hud-ticks-q,
+.app-shell.hud .hud-gauge,
+.app-shell.hud .hud-brackets {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+/* As duas circunferências decorativas que só giravam saem de cena no HUD: o
+   lugar delas passa a ser ocupado por anéis que medem alguma coisa. O núcleo
+   em si — a assinatura do produto — continua intacto. */
+.app-shell.hud .lily-core-ring.ring-one,
+.app-shell.hud .lily-core-ring.ring-two {
+  display: none;
+}
+
+/* radial-gradient usa farthest-corner por padrão: ali "50%" vale ~70% do raio
+   do elemento e a coroa vaza para dentro, virando um sol de raios. closest-side
+   é o que faz "100%" significar a borda de verdade. */
+.app-shell.hud .hud-ticks {
+  inset: -22px;
+  background: repeating-conic-gradient(
+    from 0deg,
+    rgba(var(--lily-glow-rgb), var(--hud-lb)) 0deg 0.55deg,
+    transparent 0.55deg 6deg
+  );
+  -webkit-mask: radial-gradient(
+    circle closest-side,
+    transparent 0 calc(100% - 9px),
+    #000 calc(100% - 9px) 100%
+  );
+  mask: radial-gradient(
+    circle closest-side,
+    transparent 0 calc(100% - 9px),
+    #000 calc(100% - 9px) 100%
+  );
+}
+
+.app-shell.hud .hud-ticks-q {
+  inset: -34px;
+  background: repeating-conic-gradient(
+    from 0deg,
+    rgba(var(--lily-glow-rgb), var(--hud-lb)) 0deg 1.2deg,
+    transparent 1.2deg 30deg
+  );
+  -webkit-mask: radial-gradient(
+    circle closest-side,
+    transparent 0 calc(100% - 14px),
+    #000 calc(100% - 14px) 100%
+  );
+  mask: radial-gradient(
+    circle closest-side,
+    transparent 0 calc(100% - 14px),
+    #000 calc(100% - 14px) 100%
+  );
+}
+
+.app-shell.hud .hud-gauge {
+  inset: -50px;
+  background: conic-gradient(
+    from -90deg,
+    var(--primary) 0 calc(var(--hud-p, 0) * 3.6deg),
+    rgba(var(--lily-glow-rgb), 0.1) calc(var(--hud-p, 0) * 3.6deg) 360deg
+  );
+  -webkit-mask: radial-gradient(
+    circle closest-side,
+    transparent 0 calc(100% - 5px),
+    #000 calc(100% - 5px) 100%
+  );
+  mask: radial-gradient(
+    circle closest-side,
+    transparent 0 calc(100% - 5px),
+    #000 calc(100% - 5px) 100%
+  );
+}
+
+.app-shell.hud .hud-brackets {
+  inset: -64px;
+}
+
+.app-shell.hud .hud-brackets::before,
+.app-shell.hud .hud-brackets::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  border-top: 1px solid rgba(var(--lily-glow-rgb), var(--hud-lb));
+  border-left: 1px solid rgba(var(--lily-glow-rgb), var(--hud-lb));
+}
+
+.app-shell.hud .hud-brackets::before {
+  top: 0;
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.app-shell.hud .hud-brackets::after {
+  bottom: 0;
+  transform: translateX(-50%) rotate(-135deg);
+}
+
+/* O interior do núcleo é a assinatura do produto e continua lá — só baixa o
+   volume. Ele estava mais claro que o R$ da tela, e a regra desta pele é que o
+   dinheiro é a única coisa em contraste máximo. Nada foi removido. */
+.app-shell.hud .lily-core::before {
+  opacity: 0.34;
+}
+
+.app-shell.hud .lily-core-grid {
+  opacity: 0.14;
+}
+
+.app-shell.hud .lily-core-nodes {
+  opacity: 0.5;
+}
+
+.app-shell.hud .lily-core-scan {
+  opacity: 0.3;
+}
+
+.app-shell.hud .lily-core {
+  box-shadow:
+    0 0 26px rgba(var(--lily-glow-rgb), 0.26),
+    0 0 120px rgba(var(--lily-glow-rgb), 0.12),
+    inset 0 0 40px rgba(0, 0, 0, 0.6),
+    inset 0 0 110px rgba(0, 0, 0, 0.86);
+}
+
+/* As duas elipses de órbita não medem nada e brigam com a grade do painel. */
+.app-shell.hud .lily-orbit-stage::before,
+.app-shell.hud .lily-orbit-stage::after {
+  display: none;
+}
+
+/* J1: um anel só. */
+.app-shell.hud.hud-j1 .hud-ticks-q,
+.app-shell.hud.hud-j1 .hud-gauge,
+.app-shell.hud.hud-j1 .hud-brackets {
+  display: none;
+}
+
+/* A leitura mora na faixa escura entre o orbe e a coroa de marcações — nunca
+   em cima do orbe aceso, que é laranja brilhante. */
+.app-shell.hud .hud-read {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, calc(var(--hud-core-d, 240px) * 0.3));
+  z-index: 4;
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  padding: 3px 9px 4px;
+  background: rgba(8, 9, 8, 0.74);
+  pointer-events: none;
+  text-align: center;
+}
+
+.app-shell.hud .hud-read strong {
+  font-family: var(--hud-mono);
+  font-size: 1.2rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 14px rgba(var(--lily-glow-rgb), 0.55);
+}
+
+.app-shell.hud .hud-read span {
+  font-family: var(--hud-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--hud-dim);
+}
+
+.app-shell.hud.hud-j1 .hud-read {
+  display: none;
+}
+
+.app-shell.hud .lily-voice-status {
+  display: none;
+}
+
+/* -------------------------------------------------------------- campos */
+.app-shell.hud > main .input-group input {
+  /* fundo PREENCHIDO, não transparente: a hairline sozinha não passa no piso
+     de 3:1 e não pode ser a única coisa desenhando o campo. */
+  background: var(--hud-panel-2);
+  border: 0;
+  border-radius: 0;
+  box-shadow: inset 0 0 0 1px rgba(var(--lily-glow-rgb), 0.28);
+  font-family: var(--hud-mono);
+  font-variant-numeric: tabular-nums;
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+}
+
+/* clip-path recorta box-shadow externo E outline: um :focus-visible normal
+   simplesmente não aparece num campo chanfrado — compila, roda, não avisa.
+   drop-shadow segue a silhueta do clip-path e é a saída que funciona. */
+.app-shell.hud > main .input-group input:focus {
+  box-shadow: inset 0 0 0 1px var(--primary);
+  filter: drop-shadow(0 0 2px rgba(var(--lily-glow-rgb), 0.95))
+    drop-shadow(0 0 7px rgba(var(--lily-glow-rgb), 0.45));
+}
+
+.app-shell.hud > main .input-group label {
+  background: transparent;
+  font-family: var(--hud-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--hud-dim);
+  top: -18px;
+  left: 0;
+}
+
+.app-shell.hud > main .input-group input:focus + label,
+.app-shell.hud > main .input-group input:not(:placeholder-shown) + label {
+  top: -18px;
+  left: 0;
+  font-size: 0.66rem;
+}
+
+.app-shell.hud > main .inputs {
+  margin-top: 20px;
+  row-gap: 30px;
+}
+
+/* -------------------------------------------------------------- botões */
+/* D2: quatro botões iguais viram três níveis. APAGAR deixa de ter a mesma cor
+   de NOVA CONTA. */
+.app-shell.hud > main .actions-grid button {
+  border-radius: 0;
+  box-shadow: none;
+  clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
+}
+
+.app-shell.hud > main .actions-grid button:hover {
+  transform: none;
+  filter: brightness(1.12);
+}
+
+.app-shell.hud > main .actions-grid .button-muted {
+  background: rgba(var(--lily-glow-rgb), 0.06);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px rgba(var(--lily-glow-rgb), var(--hud-lb));
+}
+
+/* CADASTRAR CONTA não tem classe nem id no JSX; é o terceiro da grade.
+   Sem isto ele fica amarelo cheio ao lado do CALCULAR — dois primários. */
+.app-shell.hud > main .actions-grid button:nth-child(3) {
+  background: rgba(var(--lily-glow-rgb), 0.06);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px rgba(var(--lily-glow-rgb), var(--hud-lb));
+}
+
+.app-shell.hud > main .actions-grid #resetar {
+  background: rgba(255, 68, 68, 0.07);
+  color: #ff7b7b;
+  box-shadow: inset 0 0 0 1px rgba(255, 68, 68, 0.5);
+}
+
+/* ------------------------------------------------------------ resultado */
+/* Telemetria com linha pontilhada (ref. 15). O dinheiro é a única coisa em
+   contraste máximo: regra fiscalizável em code review — nada de HUD passa de
+   30% de alpha, e nada acima de 30% deixa de ser dado. */
+.app-shell.hud > main .resultado {
+  background: var(--hud-panel-2);
+  border-radius: 0;
+  box-shadow: inset 0 0 0 1px rgba(var(--lily-glow-rgb), var(--hud-lb));
+  clip-path: polygon(
+    var(--hud-ch) 0,
+    100% 0,
+    100% calc(100% - var(--hud-ch)),
+    calc(100% - var(--hud-ch)) 100%,
+    0 100%,
+    0 var(--hud-ch)
+  );
+}
+
+.app-shell.hud > main .resultado h3 {
+  font-family: var(--hud-mono);
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+}
+
+.app-shell.hud > main .resultado .linha {
+  align-items: baseline;
+  gap: 10px;
+  font-family: var(--hud-mono);
+  /* 12px é o piso que eu adotaria para qualquer rótulo que nomeie dinheiro.
+     10px fica só para ambiente (status, hora, versão) — ver a faixa de status. */
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--hud-dim);
+}
+
+.app-shell.hud > main .resultado .linha::before {
+  content: "";
+  order: 1;
+  flex: 1;
+  min-width: 14px;
+  border-bottom: 1px dotted rgba(var(--lily-glow-rgb), var(--hud-lb));
+  transform: translateY(-3px);
+}
+
+.app-shell.hud > main .resultado .linha > :last-child {
+  order: 2;
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.app-shell.hud > main .resultado .linha-strong {
+  border-top: 1px solid rgba(var(--lily-glow-rgb), var(--hud-la));
+  font-size: 0.8rem;
+}
+
+.app-shell.hud > main .resultado .linha-strong > :last-child {
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-shadow: 0 0 20px rgba(var(--lily-glow-rgb), 0.4);
+}
+
+/* ------------------------------------------------------- J3 mais denso */
+.app-shell.hud.hud-j3 > main .resultado .linha {
+  font-size: 0.72rem;
+}
+
+/* --------------------------------------------------------- 390 px e abaixo */
+@media (max-width: 560px) {
+  .app-shell.hud {
+    --hud-ch: 12px;
+  }
+
+  .app-shell.hud > header {
+    padding: 14px 16px 12px 70px;
+  }
+
+  .app-shell.hud > header h1 {
+    font-size: 1.25rem;
+  }
+
+  .app-shell.hud .hud-seg {
+    justify-items: start;
+  }
+
+  .app-shell.hud > .hud-strip {
+    width: calc(100vw - 32px);
+    gap: 6px 14px;
+  }
+
+  .app-shell.hud .hud-levels {
+    margin-left: 0;
+  }
+
+  /* Ate 560px o palco vira coluna: a copy sai de position:absolute e o nucleo
+     desce. Sem isto o texto do assistente fica embaixo do nucleo. */
+  .app-shell.hud .lily-orbit-stage {
+    min-height: 0;
+    display: grid;
+    place-items: center;
+    gap: 30px;
+    padding-top: 4px;
+  }
+
+  .app-shell.hud .lily-core-copy {
+    position: static;
+    width: 100%;
+    order: -1;
+    text-align: center;
+    justify-items: center;
+  }
+
+  .app-shell.hud .lily-core-copy h2 {
+    font-size: 1.6rem;
+  }
+
+  .app-shell.hud .lily-mode-satellites {
+    position: static;
+  }
+
+  .app-shell.hud .hud-ticks {
+    inset: -14px;
+  }
+
+  .app-shell.hud .hud-ticks-q {
+    inset: -22px;
+  }
+
+  .app-shell.hud .hud-gauge {
+    inset: -32px;
+  }
+
+  .app-shell.hud .hud-brackets {
+    inset: -42px;
+  }
+
+  .app-shell.hud > main .resultado .linha-strong > :last-child {
+    font-size: 1.3rem;
+  }
+}
+
+/* ===========================================================================
+   MOVIMENTO
+   O app tinha 7 @keyframes e ZERO regras de prefers-reduced-motion antes desta
+   mudança. Este bloco cobre as animações novas E as sete que já existiam.
+   A regra: movimento só decora, nunca informa. Com ele desligado o HUD
+   continua legível e utilizável — o gauge de margem é estático e permanece,
+   nenhum dado se perde, some só o show.
+   ========================================================================= */
+@media (prefers-reduced-motion: reduce) {
+  .app-shell .lily-core,
+  .app-shell .lily-core::before,
+  .app-shell .lily-core::after,
+  .app-shell .lily-core-ring,
+  .app-shell .lily-core-grid,
+  .app-shell .lily-core-nodes,
+  .app-shell .lily-core-scan,
+  .app-shell .lily-core-pulse,
+  .app-shell .lily-orbit-stage::before,
+  .app-shell .lily-orbit-stage::after,
+  .app-shell.hud .hud-live.is-on::before {
+    animation: none !important;
+  }
+
+  .app-shell button:hover {
+    transform: none;
+  }
+
+  .app-shell,
+  .app-shell * {
+    scroll-behavior: auto;
   }
 }

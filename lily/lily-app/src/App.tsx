@@ -1,4 +1,11 @@
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   createUserWithEmailAndPassword,
@@ -88,10 +95,24 @@ type Client = {
   ie?: string;
 };
 
+/**
+ * Intensidade da pele HUD ("JARVIS") da home.
+ * j1 Visor  — discreta: 1 anel, faixa de status, chanfro na gaveta.
+ * j2 Nucleo — padrao: 3 aneis (o externo mede a margem), grade, scanlines.
+ * j3 Hangar — cinematografica: reticulo, telemetria estendida, boot.
+ *
+ * ATENCAO: isto e ESTETICA e nada mais. Nao confundir com `isBlueMode`, que e
+ * regra de negocio (troca a formula do calculo, revela campos e filtra contas).
+ * As duas coisas sao ortogonais de proposito.
+ */
+type HudLevel = "j1" | "j2" | "j3";
+
 type Config = {
   valorHora: number;
   pecas: string[];
   clientes: Client[];
+  /** Opcional: configs gravadas antes desta versao nao tem a chave. */
+  hudLevel?: HudLevel;
 };
 
 type LilyAccount = {
@@ -215,7 +236,10 @@ const defaultConfig: Config = {
   valorHora: 40,
   pecas: ["Radiador", "Caixa", "Intercooler", "Condensador"],
   clientes: [],
+  hudLevel: "j2",
 };
+
+const hudLevels: HudLevel[] = ["j1", "j2", "j3"];
 
 const defaultAccountForm: AccountForm = {
   marca: "",
@@ -400,6 +424,20 @@ const translations = {
     viewAccounts: "Visualizar Contas Cadastradas",
     piece: "Peça",
     ourStock: "Estoque Nosso",
+    hudAccountMode: "Modo de cálculo",
+    hudModeYellow: "Conta amarela",
+    hudModeBlue: "Conta azul",
+    hudStripCore: "L.I.L.Y online",
+    hudStripEngine: "Motor",
+    hudEngineOnline: "ouvindo",
+    hudEngineIdle: "em espera",
+    hudEngineOffline: "fora do ar",
+    hudMargin: "margem",
+    hudNoData: "sem cálculo",
+    hudIntensity: "HUD",
+    hudLevelVisor: "Visor",
+    hudLevelCore: "Núcleo",
+    hudLevelHangar: "Hangar",
     initialValue: "Valor Inicial (R$)",
     freight: "Frete (R$)",
     employee: "Funcionário (R$)",
@@ -628,6 +666,20 @@ const translations = {
     viewAccounts: "View Registered Accounts",
     piece: "Part",
     ourStock: "Our Stock",
+    hudAccountMode: "Calculation mode",
+    hudModeYellow: "Yellow account",
+    hudModeBlue: "Blue account",
+    hudStripCore: "L.I.L.Y online",
+    hudStripEngine: "Engine",
+    hudEngineOnline: "listening",
+    hudEngineIdle: "standby",
+    hudEngineOffline: "offline",
+    hudMargin: "margin",
+    hudNoData: "no calculation",
+    hudIntensity: "HUD",
+    hudLevelVisor: "Visor",
+    hudLevelCore: "Core",
+    hudLevelHangar: "Hangar",
     initialValue: "Initial Value (R$)",
     freight: "Freight (R$)",
     employee: "Employee (R$)",
@@ -1079,6 +1131,21 @@ function App() {
     stopping: t("lilyVoiceStopping"),
     error: t("lilyVoiceError"),
   }[lilyVoiceStatus];
+  const hudLevel: HudLevel = config.hudLevel ?? "j2";
+  /** Motor de voz na 8765: ausencia dele e estado previsto, nao travamento. */
+  const engineOnline = lilyVoiceStatus === "active";
+  const engineLabel =
+    lilyVoiceStatus === "error"
+      ? t("hudEngineOffline")
+      : engineOnline
+        ? t("hudEngineOnline")
+        : t("hudEngineIdle");
+  /**
+   * Margem = lucro / venda. Unico numero do HUD que nao existia no app antes,
+   * e o anel externo do nucleo o desenha. Sem calculo, o anel fica vazio.
+   */
+  const hudMargin =
+    results && results.venda > 0 ? (results.lucro / results.venda) * 100 : null;
   const lilyCoreStateClass = [
     "lily-core",
     lilyVoiceStatus === "active" ? "is-listening" : "",
@@ -2211,7 +2278,17 @@ function App() {
   const accountSaveLabel = selectedAccount ? t("update") : t("confirm");
 
   return (
-    <div className={isBlueMode ? "app-shell azul" : "app-shell"}>
+    /*
+     * `azul` = NEGOCIO (formula do calculo, campos, filtro de contas).
+     * `hud` + `hud-jN` = ESTETICA. Trocar a intensidade e trocar esta classe;
+     * toda a pele esta escrita em var(--primary) / var(--lily-glow-rgb), entao
+     * ela nasce funcionando nos dois primaries sem uma linha a mais.
+     */
+    <div
+      className={["app-shell", isBlueMode ? "azul" : "", "hud", `hud-${hudLevel}`]
+        .filter(Boolean)
+        .join(" ")}
+    >
       <Toasts messages={toasts} />
 
       <div className="legacy-user-menu" style={{ display: "none" }}>
@@ -2928,21 +3005,72 @@ function App() {
       {view === "home" && (
         <>
           <header>
-            <h1>L.I.L.Y</h1>
-            <p>{t("appSubtitle")}</p>
-            <label className="switch">
-              <input
-                type="checkbox"
-                checked={isBlueMode}
-                onChange={(event) => {
-                  setIsBlueMode(event.target.checked);
-                  setSelectedAccountId(null);
-                  setResults(null);
-                }}
-              />
-              <span className="slider" />
-            </label>
+            <div className="hud-brand">
+              <h1>L.I.L.Y</h1>
+              <p>{t("appSubtitle")}</p>
+            </div>
+
           </header>
+
+          <div className="hud-strip">
+            <span className={engineOnline ? "hud-live is-on" : "hud-live"}>
+              {t("hudStripCore")}
+            </span>
+            <span className="hud-strip-item">
+              {t("hudStripEngine")} <b>8765</b> {engineLabel}
+            </span>
+
+            {/* O antigo toggle sem rotulo. Mesma variavel e mesmo efeito
+                colateral (limpa conta selecionada e resultado) — so que agora
+                diz o que faz. Mora aqui e nao no <header> porque .hamburger e
+                .user-menu sao position:fixed e passam por cima dele. */}
+            <div className="hud-seg" role="group" aria-label={t("hudAccountMode")}>
+              <span className="hud-strip-item">{t("hudAccountMode")}</span>
+              <div className="hud-seg-track">
+                {[false, true].map((mode) => (
+                  <button
+                    key={String(mode)}
+                    type="button"
+                    className={mode === isBlueMode ? "is-on" : ""}
+                    aria-pressed={mode === isBlueMode}
+                    onClick={() => {
+                      if (mode === isBlueMode) return;
+                      setIsBlueMode(mode);
+                      setSelectedAccountId(null);
+                      setResults(null);
+                    }}
+                  >
+                    {mode ? t("hudModeBlue") : t("hudModeYellow")}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Seletor de intensidade. Estetica pura: so troca a classe do
+                shell e persiste em config.hudLevel. */}
+            <div className="hud-seg hud-levels" role="group" aria-label={t("hudIntensity")}>
+              <span className="hud-strip-item">{t("hudIntensity")}</span>
+              <div className="hud-seg-track">
+                {hudLevels.map((level) => (
+                  <button
+                    key={level}
+                    type="button"
+                    className={level === hudLevel ? "is-on" : ""}
+                    aria-pressed={level === hudLevel}
+                    onClick={() =>
+                      setConfig((prev) => ({ ...prev, hudLevel: level }))
+                    }
+                  >
+                    {level === "j1"
+                      ? t("hudLevelVisor")
+                      : level === "j2"
+                        ? t("hudLevelCore")
+                        : t("hudLevelHangar")}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
 
           <main>
             <section
@@ -2967,7 +3095,31 @@ function App() {
                   <span className="lily-core-nodes" />
                   <span className="lily-core-scan" />
                   <span className="lily-core-pulse" />
+                  {/* Camadas do HUD. Invisiveis fora de .app-shell.hud. */}
+                  <span className="hud-ticks" />
+                  <span className="hud-ticks-q" />
+                  <span
+                    className="hud-gauge"
+                    style={
+                      {
+                        "--hud-p": hudMargin === null ? 0 : hudMargin.toFixed(1),
+                      } as CSSProperties
+                    }
+                  />
+                  <span className="hud-brackets" />
                 </button>
+
+                <div className="hud-read" aria-live="polite">
+                  <strong>
+                    {hudMargin === null
+                      ? "--"
+                      : `${hudMargin.toLocaleString("pt-BR", {
+                          minimumFractionDigits: 1,
+                          maximumFractionDigits: 1,
+                        })}%`}
+                  </strong>
+                  <span>{hudMargin === null ? t("hudNoData") : t("hudMargin")}</span>
+                </div>
 
                 <div className="lily-core-copy">
                   <span className="lily-kicker">{t("lilyCoreLabel")}</span>
