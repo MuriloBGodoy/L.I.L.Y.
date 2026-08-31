@@ -1,4 +1,11 @@
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   createUserWithEmailAndPassword,
@@ -143,7 +150,6 @@ type AccountForm = {
   veiculo: string;
   tipoPeca: string;
   tipoProprietario: OwnerType;
-  proprietario: string;
   clienteSelect: string;
   clienteTelefone: string;
   vendidoPorInput: string;
@@ -222,7 +228,6 @@ const defaultAccountForm: AccountForm = {
   veiculo: "",
   tipoPeca: "",
   tipoProprietario: "estoque",
-  proprietario: "",
   clienteSelect: "",
   clienteTelefone: "",
   vendidoPorInput: "",
@@ -265,17 +270,79 @@ const defaultProfileForm: ProfileForm = {
 const lilyWebServerUrl =
   import.meta.env.VITE_LILY_WEB_SERVER_URL ?? "http://127.0.0.1:8765";
 
-const defaultLilyChatMessages: LilyChatMessage[] = [
-  {
-    id: 1,
-    author: "lily",
-    text: "Opa, estou por aqui. Pode mandar uma mensagem ou ativar minha voz pelo painel.",
-  },
-];
+/* Recebe o texto ja traduzido: a mensagem de boas-vindas e a primeira coisa
+   que ele le, e antes estava cravada em portugues. */
+function createWelcomeMessages(text: string): LilyChatMessage[] {
+  return [{ id: 1, author: "lily", text }];
+}
 
 const translations = {
   "pt-BR": {
     appSubtitle: "From Santa Rita Radiadores",
+    // ---- reestrutura 2026-08-31: trilho, gaveta e secoes
+    navCore: "Núcleo",
+    navCalc: "Calcular",
+    navAccounts: "Contas",
+    navSettings: "Ajustes",
+    navMain: "Navegação principal",
+    navModeGroup: "Filtro de modo de cálculo",
+    openUserMenu: "Abrir menu do usuário",
+    drawerTitle: "Calculadora de serviço",
+    drawerToggle: "Calcular um serviço",
+    drawerIdle: "Preencha os valores e toque em calcular",
+    drawerModeYellow: "Modo amarela",
+    drawerModeBlue: "Modo azul",
+    drawerAccount: "Conta",
+    drawerClearAccount: "Limpar conta selecionada",
+    finalProfitShort: "lucro final",
+    inss: "INSS (R$)",
+    accountsKicker: "Registros",
+    accountsShowingOne: "conta visível neste modo",
+    accountsShowingMany: "contas visíveis neste modo",
+    accountsFilterNote:
+      "O switch amarela/azul é um filtro: as contas do outro modo ficam escondidas.",
+    colVehicle: "Veículo / Peça",
+    colClient: "Cliente",
+    colTotal: "Total",
+    selectAccount: "Selecionar conta",
+    deleteAccountAction: "Apagar conta",
+    emptyAccountsTitle: "Nenhuma conta cadastrada ainda",
+    emptyAccountsHint:
+      "Calcule um serviço na gaveta do rodapé e use CADASTRAR CONTA para guardar o primeiro registro.",
+    noResultsTitle: "Nenhum registro para esse filtro",
+    noResultsHint:
+      "Tente outro termo de busca, outra marca, ou troque o filtro de modo.",
+    loadingAccounts: "Carregando contas...",
+    settingsKicker: "Preferências",
+    settingsIntro: "Parâmetros que alimentam os cálculos e os cadastros.",
+    closeModal: "Fechar",
+    loginBusy: "Entrando...",
+    registerBusy: "Criando conta...",
+    passWeak: "Senha fraca",
+    passMedium: "Senha média",
+    passStrong: "Senha forte",
+    lilyChatWelcome:
+      "Opa, estou por aqui. Pode mandar uma mensagem ou ativar minha voz pelo painel.",
+    lilyReplyCalc:
+      "Manda os valores nos campos principais e aperta Calcular. Se quiser guardar, usa Cadastrar Conta depois.",
+    lilyReplyVoiceDesktop:
+      "Pra voz funcionar, ativa o painel e segura ALT enquanto fala comigo.",
+    lilyReplyVoiceWeb:
+      "Na web eu uso a voz do navegador. Ativa o chat de voz e libera o microfone quando aparecer a permissão.",
+    lilyReplyClients:
+      "Clientes ficam em Ajustes > Clientes. Depois você consegue vincular no cadastro da conta.",
+    lilyReplyDefault:
+      "Recebi sua mensagem. Por enquanto este chat está no modo assistente local; quando ligarmos a IA, eu respondo com mais contexto.",
+    brandLabel: "Marca",
+    vehicleLabel: "Veículo",
+    pieceTypeLabel: "Tipo de peça",
+    registeredClientLabel: "Cliente cadastrado",
+    clientTypeLabel: "Tipo de cliente",
+    removePieceAction: "Remover peça",
+    removeClientAction: "Remover cliente",
+    openTerms: "Ler os termos de uso",
+    hourlyFieldLabel: "Valor por hora (R$)",
+    accountsSearchLabel: "Buscar",
     userMenuAccount: "Conta",
     userMenuProfile: "Editar perfil",
     userMenuLanguage: "Idioma",
@@ -315,7 +382,6 @@ const translations = {
     profilePhotoUploadFailed:
       "Não foi possível sincronizar a foto agora. Os outros dados serão salvos.",
     lilyAssistantTitle: "L.I.L.Y Assistente",
-    lilyAssistantSubtitle: "Ative a voz no app desktop ou converse comigo por mensagem.",
     lilyVoiceIdle: "Desativada",
     lilyVoiceStarting: "Iniciando...",
     lilyVoiceActive: "Ativa",
@@ -347,11 +413,12 @@ const translations = {
     coreChipVoice: "Falar por voz",
     lilyVoiceMode: "Chat de voz",
     lilyMessageMode: "Chat mensagem",
-    lilyChat: "Chat",
     lilyChatPlaceholder: "Digite uma mensagem para a L.I.L.Y...",
     lilyChatSend: "Enviar",
     lilyChatThinking: "L.I.L.Y pensando...",
     lilyChatError: "Não consegui responder agora.",
+    engineOffline:
+      "A engine de IA não respondeu. Respondendo pelo modo local, mais limitado.",
     verifyEmailSent:
       "Cadastro criado. Enviamos um e-mail de confirmação antes de liberar o acesso.",
     verifyEmailRequired:
@@ -403,9 +470,6 @@ const translations = {
     termsResponsibilityText:
       "Valores de INSS e margens de lucro devem ser conferidos periodicamente pelo gestor.",
     termsAcceptButton: "Entendi e Aceito",
-    sidebarTitle: "L.I.L.Y Menu",
-    settingsPanel: "Painel de Configurações",
-    viewAccounts: "Visualizar Contas Cadastradas",
     piece: "Peça",
     ourStock: "Estoque Nosso",
     initialValue: "Valor Inicial (R$)",
@@ -428,7 +492,6 @@ const translations = {
     assembly: "Montagem",
     coreAssembly: "Colmeia + Montagem",
     assemblySale: "Montagem + Venda",
-    back: "Voltar",
     settings: "Configurações",
     hourlyValue: "Valor da Hora",
     hourlyValueDesc: "Define o custo da mão de obra nos cálculos azul.",
@@ -445,7 +508,6 @@ const translations = {
     noVehicle: "Sem Veículo",
     general: "Geral",
     notInformed: "Não informada",
-    client: "Cliente",
     singleClient: "Cliente",
     walkIn: "Avulso",
     selectBrand: "Selecione uma marca...",
@@ -483,6 +545,8 @@ const translations = {
     alertRegisterSuccess: "Conta criada com sucesso.",
     alertRegisterError: "Erro ao registrar",
     alertLoginError: "Usuário ou senha incorretos.",
+    accountsLoadError: "Não consegui carregar as contas",
+    loginDataError: "Entrei, mas não consegui carregar seus dados",
     alertDeleteConfirm: "Deseja excluir permanentemente este registro?",
     alertDeleteError: "Erro ao deletar",
     alertAccountRequired: "Marca, veículo e tipo de peça são obrigatórios.",
@@ -495,23 +559,87 @@ const translations = {
     alertRemoveClient: "Deseja remover este cliente?",
     accountImageTitle: "Imagem para reconhecimento",
     accountImageSubtitle:
-      "Insira ou capture uma foto da peca para preencher marca, veiculo e tipo com TensorFlow/Gemini.",
+      "Insira ou capture uma foto da peça para preencher marca, veículo e tipo.",
     accountImageUpload: "Inserir imagem",
     accountImageCapture: "Capturar",
     accountImageAnalyze: "Reconhecer",
     accountImageRemove: "Remover",
     accountImageEmpty: "Nenhuma imagem selecionada.",
-    accountImageReady: "Imagem pronta para analise.",
+    accountImageReady: "Imagem pronta para análise.",
     accountImageAnalyzing: "Analisando imagem...",
     accountImageDone: "Campos preenchidos com base na imagem.",
     accountImageInvalid: "Escolha uma imagem JPG, PNG ou WEBP.",
     accountImagePlaceholder: "Preview da imagem",
     accountDataSection: "Dados da conta",
-    accountOwnerSection: "Proprietario",
+    accountOwnerSection: "Proprietário",
     accountValuesSection: "Valores",
   },
   "en-US": {
     appSubtitle: "From Santa Rita Radiadores",
+    // ---- restructure 2026-08-31: rail, drawer and sections
+    navCore: "Core",
+    navCalc: "Calculate",
+    navAccounts: "Accounts",
+    navSettings: "Settings",
+    navMain: "Main navigation",
+    navModeGroup: "Calculation mode filter",
+    openUserMenu: "Open user menu",
+    drawerTitle: "Service calculator",
+    drawerToggle: "Calculate a service",
+    drawerIdle: "Fill in the values and hit calculate",
+    drawerModeYellow: "Yellow mode",
+    drawerModeBlue: "Blue mode",
+    drawerAccount: "Account",
+    drawerClearAccount: "Clear selected account",
+    finalProfitShort: "final profit",
+    inss: "INSS (R$)",
+    accountsKicker: "Records",
+    accountsShowingOne: "account visible in this mode",
+    accountsShowingMany: "accounts visible in this mode",
+    accountsFilterNote:
+      "The yellow/blue switch is a filter: accounts from the other mode stay hidden.",
+    colVehicle: "Vehicle / Part",
+    colClient: "Client",
+    colTotal: "Total",
+    selectAccount: "Select account",
+    deleteAccountAction: "Delete account",
+    emptyAccountsTitle: "No accounts saved yet",
+    emptyAccountsHint:
+      "Calculate a service in the bottom drawer and use REGISTER ACCOUNT to save your first record.",
+    noResultsTitle: "No records for this filter",
+    noResultsHint:
+      "Try another search term, another brand, or switch the mode filter.",
+    loadingAccounts: "Loading accounts...",
+    settingsKicker: "Preferences",
+    settingsIntro: "Parameters that feed the calculations and the records.",
+    closeModal: "Close",
+    loginBusy: "Signing in...",
+    registerBusy: "Creating account...",
+    passWeak: "Weak password",
+    passMedium: "Medium password",
+    passStrong: "Strong password",
+    lilyChatWelcome:
+      "Hey, I am right here. Send me a message or turn my voice on from the panel.",
+    lilyReplyCalc:
+      "Type the values in the main fields and hit Calculate. To keep it, use Register Account afterwards.",
+    lilyReplyVoiceDesktop:
+      "For voice to work, turn the panel on and hold ALT while you talk to me.",
+    lilyReplyVoiceWeb:
+      "On the web I use the browser voice. Start the voice chat and allow the microphone when asked.",
+    lilyReplyClients:
+      "Clients live in Settings > Clients. After that you can link them when registering an account.",
+    lilyReplyDefault:
+      "Got your message. This chat is in local assistant mode for now; once the AI is connected I will answer with more context.",
+    brandLabel: "Brand",
+    vehicleLabel: "Vehicle",
+    pieceTypeLabel: "Part type",
+    registeredClientLabel: "Registered client",
+    clientTypeLabel: "Client type",
+    removePieceAction: "Remove part",
+    removeClientAction: "Remove client",
+    openTerms: "Read the terms of use",
+    hourlyFieldLabel: "Hourly value (R$)",
+    accountsSearchLabel: "Search",
     userMenuAccount: "Account",
     userMenuProfile: "Edit profile",
     userMenuLanguage: "Language",
@@ -551,7 +679,6 @@ const translations = {
     profilePhotoUploadFailed:
       "Could not sync the photo now. The other data will be saved.",
     lilyAssistantTitle: "L.I.L.Y Assistant",
-    lilyAssistantSubtitle: "Enable voice in the desktop app or chat with me by message.",
     lilyVoiceIdle: "Disabled",
     lilyVoiceStarting: "Starting...",
     lilyVoiceActive: "Active",
@@ -582,11 +709,12 @@ const translations = {
     coreChipVoice: "Talk by voice",
     lilyVoiceMode: "Voice chat",
     lilyMessageMode: "Message chat",
-    lilyChat: "Chat",
     lilyChatPlaceholder: "Type a message to L.I.L.Y...",
     lilyChatSend: "Send",
     lilyChatThinking: "L.I.L.Y is thinking...",
     lilyChatError: "I could not answer right now.",
+    engineOffline:
+      "The AI engine did not answer. Falling back to the limited local mode.",
     verifyEmailSent:
       "Registration created. We sent a confirmation email before enabling access.",
     verifyEmailRequired:
@@ -638,9 +766,6 @@ const translations = {
     termsResponsibilityText:
       "INSS values and profit margins must be reviewed periodically by management.",
     termsAcceptButton: "I Understand and Accept",
-    sidebarTitle: "L.I.L.Y Menu",
-    settingsPanel: "Settings Panel",
-    viewAccounts: "View Registered Accounts",
     piece: "Part",
     ourStock: "Our Stock",
     initialValue: "Initial Value (R$)",
@@ -663,7 +788,6 @@ const translations = {
     assembly: "Assembly",
     coreAssembly: "Core + Assembly",
     assemblySale: "Assembly + Sale",
-    back: "Back",
     settings: "Settings",
     hourlyValue: "Hourly Value",
     hourlyValueDesc: "Sets labor cost in blue calculations.",
@@ -680,7 +804,6 @@ const translations = {
     noVehicle: "No Vehicle",
     general: "General",
     notInformed: "Not informed",
-    client: "Client",
     singleClient: "Client",
     walkIn: "Walk-in",
     selectBrand: "Select a brand...",
@@ -718,6 +841,8 @@ const translations = {
     alertRegisterSuccess: "Account created successfully.",
     alertRegisterError: "Registration error",
     alertLoginError: "Incorrect username or password.",
+    accountsLoadError: "Could not load the accounts",
+    loginDataError: "You are in, but I could not load your data",
     alertDeleteConfirm: "Delete this record permanently?",
     alertDeleteError: "Delete error",
     alertAccountRequired: "Brand, vehicle and part type are required.",
@@ -730,7 +855,7 @@ const translations = {
     alertRemoveClient: "Remove this client?",
     accountImageTitle: "Image recognition",
     accountImageSubtitle:
-      "Insert or capture a part photo to fill brand, vehicle and type with TensorFlow/Gemini.",
+      "Insert or capture a part photo to fill in brand, vehicle and type.",
     accountImageUpload: "Insert image",
     accountImageCapture: "Capture",
     accountImageAnalyze: "Recognize",
@@ -757,23 +882,51 @@ function readStorage<T>(key: string, fallback: T): T {
   }
 }
 
+/* O usuário digita "1.234,56" e também "1.500" para mil e quinhentos. O
+   replace(",", ".") anterior trocava só a PRIMEIRA vírgula e deixava o ponto
+   de milhar passar pelo filtro: "1.000" virava Number("1.000") = 1, e
+   "1.234,56" virava "1.234.56" = NaN = 0. O app calculava e gravava o valor
+   errado sem nada na tela denunciar. */
 function toNumber(value: string): number {
-  const cleaned = value.replace(",", ".").replace(/[^\d.-]/g, "");
-  const parsed = Number(cleaned);
-  return Number.isFinite(parsed) ? parsed : 0;
+  const limpo = value.replace(/[^\d.,-]/g, "");
+  if (!limpo) return 0;
+
+  const negativo = limpo.startsWith("-");
+  let corpo = limpo.replace(/-/g, "");
+
+  const ultimaVirgula = corpo.lastIndexOf(",");
+  if (ultimaVirgula >= 0) {
+    // Com vírgula presente, ela é o decimal e todo ponto é separador de milhar.
+    corpo =
+      corpo.slice(0, ultimaVirgula).replace(/[.,]/g, "") +
+      "." +
+      corpo.slice(ultimaVirgula + 1).replace(/[.,]/g, "");
+  } else if (/^\d{1,3}(\.\d{3})+$/.test(corpo)) {
+    /* Sem vírgula, o ponto só vale como milhar quando o inteiro está agrupado
+       de três em três ("1.500", "1.234.567"). "1.5" e "1.50" continuam
+       valendo um e meio. */
+    corpo = corpo.replace(/\./g, "");
+  }
+
+  const parsed = Number(corpo);
+  if (!Number.isFinite(parsed)) return 0;
+  return negativo ? -parsed : parsed;
 }
 
-function formatCurrency(value: number): string {
-  return value.toLocaleString("pt-BR", {
+/* A moeda continua sendo BRL em qualquer idioma: a oficina cobra em reais, e
+   trocar para USD em en-US mentiria sobre o valor. O que muda com o locale e
+   so a FORMATACAO do numero (R$ 3.316,49 vs R$3,316.49). */
+function formatCurrency(value: number, locale: Locale = "pt-BR"): string {
+  return value.toLocaleString(locale, {
     style: "currency",
     currency: "BRL",
   });
 }
 
-function formatDate(value: string): string {
+function formatDate(value: string, locale: Locale = "pt-BR"): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "--/--/----";
-  return date.toLocaleString("pt-BR");
+  return date.toLocaleString(locale);
 }
 
 function formatPhone(value: string): string {
@@ -818,13 +971,27 @@ function getPasswordStrength(pass: string) {
   if (/\d/.test(pass)) strength += 25;
   if (/[^a-zA-Z\d]/.test(pass)) strength += 25;
 
+  /* Devolve CHAVE, nao string: quem renderiza passa por t(). A cor vem de
+     token para nao brigar com o tema azul. */
   if (strength < 50) {
-    return { label: "Senha Fraca", width: `${strength}%`, color: "#ff4444" };
+    return {
+      labelKey: "passWeak" as const,
+      width: `${strength}%`,
+      color: "var(--danger)",
+    };
   }
   if (strength < 100) {
-    return { label: "Senha Média", width: `${strength}%`, color: "#ffd600" };
+    return {
+      labelKey: "passMedium" as const,
+      width: `${strength}%`,
+      color: "var(--primary)",
+    };
   }
-  return { label: "Senha Forte", width: "100%", color: "#00ced1" };
+  return {
+    labelKey: "passStrong" as const,
+    width: "100%",
+    color: "var(--success)",
+  };
 }
 
 function mapAccountRow(row: Record<string, unknown>): LilyAccount {
@@ -891,23 +1058,105 @@ function calculateResults(inputs: MainInputs, isBlueMode: boolean, valorHora: nu
   };
 }
 
+/* Rotulo flutuante: continua legivel depois que o campo e preenchido, ao
+   contrario de um placeholder puro. Os campos do modal de conta e do cadastro
+   de cliente passaram a usar este mesmo componente pelo mesmo motivo. */
 function FloatingInput(props: {
   id: string;
   label: string;
   value: string;
   onChange: (value: string) => void;
+  type?: string;
+  placeholder?: string;
 }) {
   return (
     <div className="input-group">
       <input
         id={props.id}
-        type="text"
+        type={props.type ?? "text"}
         placeholder=" "
         value={props.value}
         onChange={(event) => props.onChange(event.target.value)}
       />
       <label htmlFor={props.id}>{props.label}</label>
     </div>
+  );
+}
+
+/* Todo <select> do app estava sem rotulo: a primeira <option> fazendo de
+   placeholder nao da nome acessivel ao controle. */
+function SelectField(props: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  children: ReactNode;
+}) {
+  return (
+    <div>
+      <label className="field-label" htmlFor={props.id}>
+        {props.label}
+      </label>
+      <select
+        id={props.id}
+        value={props.value}
+        onChange={(event) => props.onChange(event.target.value)}
+      >
+        {props.children}
+      </select>
+    </div>
+  );
+}
+
+function LabeledInput(props: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
+  placeholder?: string;
+  autoComplete?: string;
+}) {
+  return (
+    <div>
+      <label className="field-label" htmlFor={props.id}>
+        {props.label}
+      </label>
+      <input
+        id={props.id}
+        type={props.type ?? "text"}
+        value={props.value}
+        placeholder={props.placeholder}
+        autoComplete={props.autoComplete}
+        onChange={(event) => props.onChange(event.target.value)}
+      />
+    </div>
+  );
+}
+
+/* Botao do trilho. Icone sem texto precisa de nome acessivel e de estado
+   anunciado: o hamburguer antigo eram tres <span/> vazios, sem nada disso. */
+function RailButton(props: {
+  label: string;
+  active?: boolean;
+  expanded?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      className={props.active ? "rail-btn is-active" : "rail-btn"}
+      onClick={props.onClick}
+      aria-label={props.label}
+      aria-current={props.active ? "page" : undefined}
+      aria-expanded={props.expanded}
+    >
+      {props.children}
+      <span className="rail-tip" aria-hidden="true">
+        {props.label}
+      </span>
+    </button>
   );
 }
 
@@ -920,19 +1169,113 @@ function ResultRow(props: { label: string; value: string; strong?: boolean }) {
   );
 }
 
-function OverlayModal(props: {
+/* UM dialogo para os seis modais do app. Antes nenhum deles tinha role,
+   aria-modal, foco inicial, foco preso nem fechar com Escape, e os × de
+   fechar ancoravam no canto da JANELA porque o cartao nao era position:
+   relative. */
+function Dialog(props: {
   title: string;
+  kicker?: string;
+  closeLabel: string;
   onClose: () => void;
+  size?: "narrow" | "wide";
+  footer?: ReactNode;
   children: ReactNode;
 }) {
+  const cardRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(props.onClose);
+  const titleId = useId();
+  closeRef.current = props.onClose;
+
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const card = cardRef.current;
+
+    function visibleFocusables(): HTMLElement[] {
+      if (!card) return [];
+      return Array.from(
+        card.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((element) => element.offsetParent !== null);
+    }
+
+    /* Foco inicial no primeiro CAMPO, nao no × de fechar: abrir um dialogo
+       com o cursor no botao de fechar nao ajuda ninguem. Sem campo, cai no
+       primeiro focavel, e sem nada focavel, no proprio cartao. */
+    const firstField = card?.querySelector<HTMLElement>(
+      'input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled])',
+    );
+    (firstField ?? visibleFocusables()[0] ?? card)?.focus();
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        closeRef.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
+
+      // Prende o foco dentro do dialogo.
+      const items = visibleFocusables();
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown, true);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown, true);
+      previouslyFocused?.focus?.();
+    };
+  }, []);
+
+  const sizeClass =
+    props.size === "wide"
+      ? "modal-card is-wide"
+      : props.size === "narrow"
+        ? "modal-card is-narrow"
+        : "modal-card";
+
   return (
-    <div className="section-overlay active">
-      <div className="modal-body">
-        <button className="close-modal" onClick={props.onClose}>
-          ×
-        </button>
-        <h2>{props.title}</h2>
-        {props.children}
+    <div
+      className="modal-scrim"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) props.onClose();
+      }}
+    >
+      <div
+        className={sizeClass}
+        ref={cardRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+      >
+        <div className="modal-head">
+          <div>
+            {props.kicker && <span className="section-kicker">{props.kicker}</span>}
+            <h2 id={titleId}>{props.title}</h2>
+          </div>
+          <button
+            type="button"
+            className="close-modal"
+            onClick={props.onClose}
+            aria-label={props.closeLabel}
+          >
+            ×
+          </button>
+        </div>
+        <div className="modal-body">{props.children}</div>
+        {props.footer && <div className="modal-buttons">{props.footer}</div>}
       </div>
     </div>
   );
@@ -948,13 +1291,9 @@ function UserAvatar(props: {
     : "user-avatar";
 
   return (
-    <div className={className}>
-      {props.photoURL ? (
-        <img src={props.photoURL} alt="" />
-      ) : (
-        props.initial
-      )}
-    </div>
+    <span className={className} aria-hidden="true">
+      {props.photoURL ? <img src={props.photoURL} alt="" /> : props.initial}
+    </span>
   );
 }
 
@@ -975,7 +1314,14 @@ function Toasts(props: { messages: ToastMessage[] }) {
 function App() {
   const [view, setView] = useState<View>("home");
   const [isBlueMode, setIsBlueMode] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  /* A gaveta da calculadora. Fechada por padrao: a home abre no nucleo, e a
+     calculadora sobe quando ele pede (chip CALCULAR / botao do trilho) ou
+     quando ja existe conta selecionada. */
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  /* Login e cadastro nao tinham estado ocupado: dava para clicar cinco vezes
+     e disparar cinco cadastros. */
+  const [authBusy, setAuthBusy] = useState(false);
+  const [accountsLoading, setAccountsLoading] = useState(false);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const [authVisible, setAuthVisible] = useState(true);
   const [termsOpen, setTermsOpen] = useState(false);
@@ -1001,8 +1347,14 @@ function App() {
   const [lilyAssistantMode, setLilyAssistantMode] =
     useState<LilyAssistantMode>(null);
   const [lilyChatMessages, setLilyChatMessages] = useState<LilyChatMessage[]>(
-    defaultLilyChatMessages,
+    () =>
+      createWelcomeMessages(
+        translations[readStorage<Locale>("lily_locale", "pt-BR")]
+          .lilyChatWelcome,
+      ),
   );
+  const chatLogRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   const [lilyChatInput, setLilyChatInput] = useState("");
   const [lilyChatBusy, setLilyChatBusy] = useState(false);
   const [browserVoices, setBrowserVoices] = useState<SpeechSynthesisVoice[]>([]);
@@ -1011,6 +1363,8 @@ function App() {
   const browserRecognitionListeningRef = useRef(false);
   const browserIsSpeakingRef = useRef(false);
   const browserChatBusyRef = useRef(false);
+  // Avisa uma vez por sessao que a engine nao respondeu, em vez de a cada frase.
+  const engineOfflineAvisadaRef = useRef(false);
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [registerForm, setRegisterForm] = useState<RegisterForm>(
@@ -1125,6 +1479,41 @@ function App() {
     analyzing: t("accountImageAnalyzing"),
     done: t("accountImageDone"),
   }[accountImageStatus];
+
+  /* O <html lang> estava fixo em pt-BR no index.html: leitor de tela lia o
+     ingles com fonemas portugueses. */
+  useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
+
+  /* O log do chat nunca rolava sozinho: passadas algumas mensagens, a
+     resposta da Lily nascia fora da vista. */
+  useEffect(() => {
+    const log = chatLogRef.current;
+    if (log) log.scrollTop = log.scrollHeight;
+  }, [lilyChatMessages, lilyChatBusy, lilyAssistantMode, lilyAssistantOpen]);
+
+  /* O menu do usuario so fechava clicando de novo no gatilho. */
+  useEffect(() => {
+    if (!userMenuOpen) return;
+
+    function handlePointerDown(event: MouseEvent) {
+      if (!userMenuRef.current?.contains(event.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setUserMenuOpen(false);
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [userMenuOpen]);
 
   function notify(message: string, tone: ToastTone = "info") {
     const id = Date.now();
@@ -1288,7 +1677,7 @@ function App() {
     if (!editId || accounts.length === 0) return;
     const account = accounts.find((item) => String(item.id) === editId);
     if (!account) return;
-    handleSelectSidebarAccount(account);
+    handleSelectAccount(account);
     localStorage.removeItem("editar_conta_id");
   }, [accounts]);
 
@@ -1302,17 +1691,34 @@ function App() {
 
     if (!currentUser) return;
 
-    const accountsQuery = query(
-      collection(db, "accounts"),
-      where("user_id", "==", currentUser.uid),
-      orderBy("data", "desc"),
-    );
-    const snapshot = await getDocs(accountsQuery);
-    setAccounts(
-      snapshot.docs.map((accountDoc) =>
-        mapFirebaseAccount(accountDoc.id, accountDoc.data() as Record<string, unknown>),
-      ),
-    );
+    // A lista de contas nao tinha estado de carregando: a tela mostrava
+    // "nenhum registro" enquanto o Firestore ainda estava respondendo.
+    setAccountsLoading(true);
+    try {
+      const accountsQuery = query(
+        collection(db, "accounts"),
+        where("user_id", "==", currentUser.uid),
+        orderBy("data", "desc"),
+      );
+      const snapshot = await getDocs(accountsQuery);
+      setAccounts(
+        snapshot.docs.map((accountDoc) =>
+          mapFirebaseAccount(
+            accountDoc.id,
+            accountDoc.data() as Record<string, unknown>,
+          ),
+        ),
+      );
+    } catch (error) {
+      /* Sem este catch a rejeição subia solta: a lista ficava vazia e parecia
+         que os dados tinham sumido. A consulta combina where com orderBy, que
+         exige índice composto no Firestore — é justamente a falha mais
+         provável aqui, e ela precisa aparecer na tela. */
+      const detalhe = error instanceof Error ? error.message : String(error);
+      notify(`${t("accountsLoadError")}: ${detalhe}`, "error");
+    } finally {
+      setAccountsLoading(false);
+    }
   }
 
   function handleCalculate() {
@@ -1473,6 +1879,14 @@ function App() {
       const webReply = isTauriRuntime
         ? null
         : await askLilyWeb(message, shouldSpeak);
+      /* Quando a engine nao responde o codigo cai num bot de if/else que
+         devolve uma frase plausivel. Sem este aviso o usuario acha que a
+         L.I.L.Y ficou burra, em vez de saber que a engine nao subiu. */
+      if (!isTauriRuntime && !webReply && !engineOfflineAvisadaRef.current) {
+        engineOfflineAvisadaRef.current = true;
+        notify(t("engineOffline"), "info");
+      }
+
       const reply = isTauriRuntime
         ? await invoke<string>("ask_lily_chat", { message, speak: shouldSpeak })
         : webReply?.reply || createLocalLilyReply(message);
@@ -1512,6 +1926,9 @@ function App() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message, speak }),
+        // Sem timeout, uma porta filtrada deixava o fetch pendurado para
+        // sempre: lilyChatBusy nunca voltava e o botao Enviar morria.
+        signal: AbortSignal.timeout(8000),
       });
       if (!response.ok) return null;
       const data = (await response.json()) as LilyWebResponse;
@@ -1528,6 +1945,7 @@ function App() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text, speak: true }),
+        signal: AbortSignal.timeout(8000),
       });
       if (response.ok) {
         const data = (await response.json()) as LilyWebResponse;
@@ -1636,18 +2054,30 @@ function App() {
 
   function createLocalLilyReply(message: string) {
     const normalized = message.toLowerCase();
-    if (normalized.includes("calcular") || normalized.includes("conta")) {
-      return "Manda os valores nos campos principais e aperta Calcular. Se quiser guardar, usa Cadastrar Conta depois.";
+    /* Este e o texto que ele MAIS ve, porque e o fallback de quando a engine
+       esta desligada. Os gatilhos aceitam os termos nos dois idiomas. */
+    if (
+      normalized.includes("calcular") ||
+      normalized.includes("calculate") ||
+      normalized.includes("conta") ||
+      normalized.includes("account")
+    ) {
+      return t("lilyReplyCalc");
     }
-    if (normalized.includes("voz") || normalized.includes("microfone")) {
+    if (
+      normalized.includes("voz") ||
+      normalized.includes("voice") ||
+      normalized.includes("microfone") ||
+      normalized.includes("microphone")
+    ) {
       return isTauriRuntime
-        ? "Pra voz funcionar, ativa o painel e segura ALT enquanto fala comigo."
-        : "Na web eu uso a voz do navegador. Ativa o chat de voz e libera o microfone quando aparecer a permissão.";
+        ? t("lilyReplyVoiceDesktop")
+        : t("lilyReplyVoiceWeb");
     }
-    if (normalized.includes("cliente")) {
-      return "Clientes ficam em Configurações > Clientes. Depois você consegue vincular no cadastro da conta.";
+    if (normalized.includes("cliente") || normalized.includes("client")) {
+      return t("lilyReplyClients");
     }
-    return "Recebi sua mensagem. Por enquanto este chat está no modo assistente local; quando ligarmos a IA, eu respondo com mais contexto.";
+    return t("lilyReplyDefault");
   }
 
   function handleAccountImageFile(file?: File | null) {
@@ -1723,6 +2153,8 @@ function App() {
     setResults(null);
     setAccountForm(defaultAccountForm);
     clearAccountImage();
+    setView("home");
+    setDrawerOpen(true);
   }
 
   function applyAccountToForm(account: LilyAccount) {
@@ -1746,7 +2178,6 @@ function App() {
       veiculo: account.veiculo,
       tipoPeca: account.tipoPeca,
       tipoProprietario: account.clienteNome ? "cliente" : "estoque",
-      proprietario: account.clienteNome ? "Responsável da Venda" : "",
       clienteSelect: matchedClient ? String(matchedClient.id) : "",
       clienteTelefone: matchedClient?.tel || account.clienteNome,
       vendidoPorInput: account.vendidoPor,
@@ -1756,7 +2187,7 @@ function App() {
     setResults(calculateResults(nextInputs, account.modo, config.valorHora || 40));
   }
 
-  async function handleRegister() {
+  async function performRegister() {
     if (
       !registerForm.nome ||
       !registerForm.email ||
@@ -1827,7 +2258,7 @@ function App() {
     setRegisterForm(defaultRegisterForm);
   }
 
-  async function handleLogin() {
+  async function performLogin() {
     if (!isFirebaseConfigured || !auth || !db) {
       const localUserData = readStorage<UserData | null>("usuario_logado", null) ?? {
         nome: loginEmail.split("@")[0] || t("userMenuAccount"),
@@ -1841,9 +2272,20 @@ function App() {
       return;
     }
 
+    /* O catch único de antes cobria o login E a leitura do Firestore, então
+       qualquer tropeço de índice, permissão ou rede era anunciado como
+       "Usuário ou senha incorretos" — o sujeito digitava a senha certa e era
+       acusado de errar. Agora são dois blocos com mensagens diferentes. */
+    let credential;
     try {
-      const credential = await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
+      credential = await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
       await credential.user.reload();
+    } catch {
+      notify(t("alertLoginError"), "error");
+      return;
+    }
+
+    try {
       if (!credential.user.emailVerified) {
         try {
           await sendEmailVerification(credential.user);
@@ -1857,11 +2299,15 @@ function App() {
         notify(t("verifyEmailRequired"), "info");
         return;
       }
+      setUser(credential.user);
+      setAuthVisible(false);
+      setLoginEmail("");
+      setLoginPassword("");
+
       const userRef = doc(db, "users", credential.user.uid);
       const userSnapshot = await getDoc(userRef);
       const userDoc = userSnapshot.exists() ? userSnapshot.data() : {};
 
-      setUser(credential.user);
       setUserData({
         nome: String(userDoc.nome ?? credential.user.displayName ?? credential.user.email ?? t("userMenuAccount")),
         user: String(userDoc.user ?? credential.user.email?.split("@")[0] ?? "usuario"),
@@ -1871,12 +2317,34 @@ function App() {
         type: (String(userDoc.type ?? "PF") === "PJ" ? "PJ" : "PF") as AccountType,
         photoURL: String(userDoc.photoURL ?? credential.user.photoURL ?? ""),
       });
-      setAuthVisible(false);
-      setLoginEmail("");
-      setLoginPassword("");
       await loadAccounts(credential.user);
-    } catch {
-      notify(t("alertLoginError"), "error");
+    } catch (error) {
+      /* Falha aqui é de dados, não de senha: deixamos ele entrar com o que dá
+         para montar só pelo credential e dizemos a verdade sobre o resto. */
+      const detalhe = error instanceof Error ? error.message : String(error);
+      notify(`${t("loginDataError")}: ${detalhe}`, "error");
+    }
+  }
+
+  /* Guarda de reentrada: sem ela, cinco cliques no botao disparavam cinco
+     cadastros. O botao tambem fica disabled enquanto isto roda. */
+  async function handleRegister() {
+    if (authBusy) return;
+    setAuthBusy(true);
+    try {
+      await performRegister();
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  async function handleLogin() {
+    if (authBusy) return;
+    setAuthBusy(true);
+    try {
+      await performLogin();
+    } finally {
+      setAuthBusy(false);
     }
   }
 
@@ -1913,6 +2381,12 @@ function App() {
 
   async function handleSaveProfile() {
     if (profileSaving) return;
+
+    /* Os catches de updateEmail/updatePassword faziam return de dentro do
+       try, pulando o setUserData la embaixo: nome, telefone, documento e
+       foto recem-editados iam para o lixo calados. Agora a falha de
+       credencial e sinalizada e o resto do perfil segue salvando. */
+    let credencialFalhou = false;
 
     const nextUserData: UserData = {
       nome: profileForm.nome.trim(),
@@ -1986,17 +2460,20 @@ function App() {
             try {
               await updateEmail(auth.currentUser, nextUserData.email);
             } catch {
-              notify(t("profilePasswordRecentLogin"), "error");
-              return;
+              // O e-mail antigo continua valendo: nao grave o novo no banco.
+              nextUserData.email = userData?.email ?? user.email ?? nextUserData.email;
+              notify(t("profileEmailAuthWarning"), "error");
+              credencialFalhou = true;
             }
           }
 
           if (passwordChanged) {
             try {
               await updatePassword(auth.currentUser, profileForm.newPassword);
+              notify(t("profilePasswordUpdated"), "success");
             } catch {
               notify(t("profilePasswordRecentLogin"), "error");
-              return;
+              credencialFalhou = true;
             }
           }
         }
@@ -2019,8 +2496,12 @@ function App() {
 
       setUserData(nextUserData);
       setProfilePhotoFile(null);
-      setProfileModalOpen(false);
-      notify(t("profileSaved"), "success");
+      /* Com a credencial recusada o modal fica aberto para ele tentar de
+         novo, mas o que ja foi salvo esta salvo e os toasts explicam. */
+      if (!credencialFalhou) {
+        setProfileModalOpen(false);
+        notify(t("profileSaved"), "success");
+      }
     } catch (error) {
       const message =
         error instanceof Error ? error.message : t("alertSaveError");
@@ -2051,10 +2532,12 @@ function App() {
     reader.readAsDataURL(file);
   }
 
-  function handleSelectSidebarAccount(account: LilyAccount) {
+  /* Escolher uma conta carrega os valores dela e ja sobe a gaveta: era a
+     regra "aberta por padrao quando voce ja tem uma conta em andamento". */
+  function handleSelectAccount(account: LilyAccount) {
     applyAccountToForm(account);
-    setSidebarOpen(false);
     setView("home");
+    setDrawerOpen(true);
   }
 
   async function handleDeleteAccount(id: number) {
@@ -2222,108 +2705,78 @@ function App() {
     }));
   }
 
-  const filteredSidebarAccounts = accounts.filter(
-    (account) => account.modo === isBlueMode,
-  );
+  const modeAccounts = accounts.filter((account) => account.modo === isBlueMode);
 
-  const visibleAccounts = accounts.filter((account) => {
-    const matchesMode = account.modo === isBlueMode;
+  const visibleAccounts = modeAccounts.filter((account) => {
     const matchesSearch =
       account.veiculo.toLowerCase().includes(accountsSearch.toLowerCase()) ||
       account.clienteNome.toLowerCase().includes(accountsSearch.toLowerCase());
     const matchesBrand =
       !accountsBrandFilter || account.marca === accountsBrandFilter;
-    return matchesMode && matchesSearch && matchesBrand;
+    return matchesSearch && matchesBrand;
   });
 
   const selectedAccount = accounts.find((account) => account.id === selectedAccountId);
   const accountModalTitle = selectedAccount ? t("editAccount") : t("registerAccount");
   const accountSaveLabel = selectedAccount ? t("update") : t("confirm");
+  const assistantConsoleOpen = lilyAssistantOpen && lilyAssistantMode !== null;
+  const isFiltering = Boolean(accountsSearch || accountsBrandFilter);
+
+  /* O que a aba da gaveta mostra quando ela esta fechada: qual conta esta em
+     andamento e o lucro final, para nao precisar abrir so para conferir. */
+  const drawerSummary = selectedAccount
+    ? [
+        selectedAccount.veiculo || t("noVehicle"),
+        selectedAccount.tipoPeca || t("piece"),
+        results ? `${t("finalProfitShort")} ${formatCurrency(results.lucro, locale)}` : "",
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : results
+      ? `${t("finalProfitShort")} ${formatCurrency(results.lucro, locale)}`
+      : t("drawerIdle");
+
+  function toggleMode(nextBlue: boolean) {
+    setIsBlueMode(nextBlue);
+    setSelectedAccountId(null);
+    setResults(null);
+  }
+
+  const railModeButtons = (
+    <div className="rail-mode" role="group" aria-label={t("navModeGroup")}>
+      <button
+        type="button"
+        className={isBlueMode ? "" : "is-on-yellow"}
+        aria-pressed={!isBlueMode}
+        onClick={() => toggleMode(false)}
+      >
+        <span aria-hidden="true">{t("yellow").slice(0, 2)}</span>
+        <span className="sr-only">{t("yellow")}</span>
+      </button>
+      <button
+        type="button"
+        className={isBlueMode ? "is-on-blue" : ""}
+        aria-pressed={isBlueMode}
+        onClick={() => toggleMode(true)}
+      >
+        <span aria-hidden="true">{t("blue").slice(0, 2)}</span>
+        <span className="sr-only">{t("blue")}</span>
+      </button>
+    </div>
+  );
 
   return (
     <div className={isBlueMode ? "app-shell azul" : "app-shell"}>
+      {/* A pele de HUD que antes era o fundo do card do nucleo. Agora e a
+          tela inteira, bem mais fraca: o efeito fica, a caixa nao. */}
+      <div className="app-bg" aria-hidden="true" />
       <Toasts messages={toasts} />
 
-      <div className="legacy-user-menu" style={{ display: "none" }}>
-        <span>{userData?.user ?? t("userMenuAccount")}</span>
-        <UserAvatar initial={userInitial} photoURL={displayPhoto} />
-      </div>
-
-      {!authVisible && (
-        <div className="user-menu">
-          <button
-            className="user-menu-trigger"
-            type="button"
-            aria-haspopup="menu"
-            aria-expanded={userMenuOpen}
-            onClick={() => setUserMenuOpen((prev) => !prev)}
-          >
-            <UserAvatar initial={userInitial} photoURL={displayPhoto} />
-            <div className="user-menu-copy">
-              <strong>{displayName}</strong>
-              <span>{displayEmail}</span>
-            </div>
-            <span className="user-menu-chevron">⌄</span>
-          </button>
-
-          {userMenuOpen && (
-            <div className="user-dropdown" role="menu">
-              <div className="user-dropdown-header">
-                <UserAvatar
-                  initial={userInitial}
-                  photoURL={displayPhoto}
-                  className="large"
-                />
-                <div>
-                  <strong>{displayName}</strong>
-                  <span>{displayEmail}</span>
-                </div>
-              </div>
-
-              <button type="button" role="menuitem" onClick={openProfileModal}>
-                <span>👤</span>
-                {t("userMenuProfile")}
-              </button>
-
-              <div className="user-dropdown-group">
-                <span className="user-dropdown-label">{t("userMenuLanguage")}</span>
-                <div className="language-switcher">
-                  <button
-                    type="button"
-                    className={locale === "pt-BR" ? "is-active" : ""}
-                    onClick={() => setLocale("pt-BR")}
-                  >
-                    PT
-                  </button>
-                  <button
-                    type="button"
-                    className={locale === "en-US" ? "is-active" : ""}
-                    onClick={() => setLocale("en-US")}
-                  >
-                    EN
-                  </button>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                role="menuitem"
-                className="logout-menu-item"
-                onClick={() => void handleLogout()}
-              >
-                <span>↪</span>
-                {t("userMenuLogout")}
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {authVisible && (
+      {authVisible ? (
         <div id="auth-screen">
-          <div className="auth-card auth-shell">
+          <div className="auth-shell">
             <section className="auth-hero">
-              <div className="auth-badge">{t("authBadge")}</div>
+              <span className="auth-badge">{t("authBadge")}</span>
               <h1 className="brand-title">L.I.L.Y</h1>
               <p className="auth-hero-text">{t("authHeroText")}</p>
               <div className="auth-highlights">
@@ -2338,18 +2791,14 @@ function App() {
               </div>
             </section>
 
-            <section
-              className={
-                authMode === "register"
-                  ? "auth-panel auth-panel-register"
-                  : "auth-panel"
-              }
-            >
+            <section className="auth-panel">
               <div className="auth-panel-header">
-                <span className="auth-kicker">
+                <span className="lily-kicker">
                   {authMode === "login" ? t("authLoginKicker") : t("authRegisterKicker")}
                 </span>
-                <h2>{authMode === "login" ? t("authLoginTitle") : t("authRegisterTitle")}</h2>
+                <h2>
+                  {authMode === "login" ? t("authLoginTitle") : t("authRegisterTitle")}
+                </h2>
                 <p>
                   {authMode === "login"
                     ? t("authLoginSubtitle")
@@ -2365,37 +2814,31 @@ function App() {
                     void handleLogin();
                   }}
                 >
-                  <div className="auth-field">
-                    <label htmlFor="login-email">{t("email")}</label>
-                    <input
-                      id="login-email"
-                      type="email"
-                      autoComplete="email"
-                      required
-                      placeholder={t("loginEmailPlaceholder")}
-                      value={loginEmail}
-                      onChange={(event) => setLoginEmail(event.target.value)}
-                    />
-                  </div>
-                  <div className="auth-field">
-                    <label htmlFor="login-password">{t("password")}</label>
-                    <input
-                      id="login-password"
-                      type="password"
-                      autoComplete="current-password"
-                      required
-                      placeholder={t("passwordPlaceholder")}
-                      value={loginPassword}
-                      onChange={(event) => setLoginPassword(event.target.value)}
-                    />
-                  </div>
-                  <button className="auth-submit" type="submit">
-                    {t("loginSubmit")}
+                  <LabeledInput
+                    id="login-email"
+                    label={t("email")}
+                    type="email"
+                    autoComplete="email"
+                    placeholder={t("loginEmailPlaceholder")}
+                    value={loginEmail}
+                    onChange={setLoginEmail}
+                  />
+                  <LabeledInput
+                    id="login-password"
+                    label={t("password")}
+                    type="password"
+                    autoComplete="current-password"
+                    placeholder={t("passwordPlaceholder")}
+                    value={loginPassword}
+                    onChange={setLoginPassword}
+                  />
+                  <button type="submit" disabled={authBusy}>
+                    {authBusy ? t("loginBusy") : t("loginSubmit")}
                   </button>
                   <p className="auth-switch-copy">
-                    {t("noAccount")}
+                    {t("noAccount")}{" "}
                     <button
-                      className="auth-toggle"
+                      className="link-button"
                       type="button"
                       onClick={() => setAuthMode("register")}
                     >
@@ -2405,7 +2848,7 @@ function App() {
                 </form>
               ) : (
                 <form
-                  className="auth-form auth-register-form"
+                  className="auth-form"
                   onSubmit={(event) => {
                     event.preventDefault();
                     void handleRegister();
@@ -2431,111 +2874,81 @@ function App() {
                   </div>
 
                   <div className="register-grid">
-                    <div className="auth-field span-two register-name-field">
-                      <label htmlFor="register-name">{t("profileName")}</label>
-                      <input
+                    <div className="span-two">
+                      <LabeledInput
                         id="register-name"
-                        type="text"
+                        label={t("profileName")}
                         autoComplete="name"
-                        required
                         placeholder={t("registerNamePlaceholder")}
                         value={registerForm.nome}
-                        onChange={(event) =>
-                          setRegisterForm((prev) => ({
-                            ...prev,
-                            nome: event.target.value,
-                          }))
+                        onChange={(value) =>
+                          setRegisterForm((prev) => ({ ...prev, nome: value }))
                         }
                       />
                     </div>
-                    <div className="auth-field register-email-field">
-                      <label htmlFor="register-email">{t("email")}</label>
-                      <input
-                        id="register-email"
-                        type="email"
-                        autoComplete="email"
-                        required
-                        placeholder={t("registerEmailPlaceholder")}
-                        value={registerForm.email}
-                        onChange={(event) =>
-                          setRegisterForm((prev) => ({
-                            ...prev,
-                            email: event.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                    <div className="auth-field register-doc-field">
-                      <label htmlFor="register-doc">
-                        {accountType === "PF" ? "CPF" : "CNPJ"}
-                      </label>
-                      <input
-                        id="register-doc"
-                        type="text"
-                        inputMode="numeric"
-                        autoComplete="off"
-                        placeholder={accountType === "PF" ? "000.000.000-00" : "00.000.000/0000-00"}
-                        value={registerForm.doc}
-                        onChange={(event) =>
-                          setRegisterForm((prev) => ({
-                            ...prev,
-                            doc: formatDoc(event.target.value, accountType),
-                          }))
-                        }
-                      />
-                    </div>
-                    <div className="auth-field register-phone-field">
-                      <label htmlFor="register-phone">{t("phone")}</label>
-                      <input
-                        id="register-phone"
-                        type="tel"
-                        inputMode="tel"
-                        autoComplete="tel"
-                        placeholder="(00) 00000-0000"
-                        value={registerForm.phone}
-                        onChange={(event) =>
-                          setRegisterForm((prev) => ({
-                            ...prev,
-                            phone: formatPhone(event.target.value),
-                          }))
-                        }
-                      />
-                    </div>
-                    <div className="auth-field register-user-field">
-                      <label htmlFor="register-user">{t("profileUser")}</label>
-                      <input
-                        id="register-user"
-                        type="text"
-                        autoComplete="username"
-                        required
-                        placeholder={t("registerUserPlaceholder")}
-                        value={registerForm.user}
-                        onChange={(event) =>
-                          setRegisterForm((prev) => ({
-                            ...prev,
-                            user: event.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                    <div className="auth-field span-two register-password-field">
-                      <label htmlFor="register-password">{t("password")}</label>
-                      <input
+                    <LabeledInput
+                      id="register-email"
+                      label={t("email")}
+                      type="email"
+                      autoComplete="email"
+                      placeholder={t("registerEmailPlaceholder")}
+                      value={registerForm.email}
+                      onChange={(value) =>
+                        setRegisterForm((prev) => ({ ...prev, email: value }))
+                      }
+                    />
+                    <LabeledInput
+                      id="register-doc"
+                      label={accountType === "PF" ? "CPF" : "CNPJ"}
+                      placeholder={
+                        accountType === "PF" ? "000.000.000-00" : "00.000.000/0000-00"
+                      }
+                      value={registerForm.doc}
+                      onChange={(value) =>
+                        setRegisterForm((prev) => ({
+                          ...prev,
+                          doc: formatDoc(value, accountType),
+                        }))
+                      }
+                    />
+                    <LabeledInput
+                      id="register-phone"
+                      label={t("phone")}
+                      type="tel"
+                      autoComplete="tel"
+                      placeholder="(00) 00000-0000"
+                      value={registerForm.phone}
+                      onChange={(value) =>
+                        setRegisterForm((prev) => ({
+                          ...prev,
+                          phone: formatPhone(value),
+                        }))
+                      }
+                    />
+                    <LabeledInput
+                      id="register-user"
+                      label={t("profileUser")}
+                      autoComplete="username"
+                      placeholder={t("registerUserPlaceholder")}
+                      value={registerForm.user}
+                      onChange={(value) =>
+                        setRegisterForm((prev) => ({ ...prev, user: value }))
+                      }
+                    />
+                    <div className="span-two">
+                      <LabeledInput
                         id="register-password"
+                        label={t("password")}
                         type="password"
                         autoComplete="new-password"
-                        required
                         placeholder={t("registerPasswordPlaceholder")}
                         value={registerForm.pass}
-                        onChange={(event) =>
-                          setRegisterForm((prev) => ({
-                            ...prev,
-                            pass: event.target.value,
-                          }))
+                        onChange={(value) =>
+                          setRegisterForm((prev) => ({ ...prev, pass: value }))
                         }
                       />
                       <div className="strength-track">
-                        <div
+                        <span
                           className="strength-bar"
                           style={{
                             width: passwordStrength.width,
@@ -2543,31 +2956,30 @@ function App() {
                           }}
                         />
                       </div>
-                      <small className="strength-label">{passwordStrength.label}</small>
+                      <small className="strength-label">
+                        {t(passwordStrength.labelKey)}
+                      </small>
                     </div>
-                    <div className="auth-field span-two register-confirm-field">
-                      <label htmlFor="register-password-confirm">
-                        {t("registerConfirmPassword")}
-                      </label>
-                      <input
+                    <div className="span-two">
+                      <LabeledInput
                         id="register-password-confirm"
+                        label={t("registerConfirmPassword")}
                         type="password"
                         autoComplete="new-password"
-                        required
                         placeholder={t("registerConfirmPasswordPlaceholder")}
                         value={registerForm.confirmPass}
-                        onChange={(event) =>
-                          setRegisterForm((prev) => ({
-                            ...prev,
-                            confirmPass: event.target.value,
-                          }))
+                        onChange={(value) =>
+                          setRegisterForm((prev) => ({ ...prev, confirmPass: value }))
                         }
                       />
                     </div>
                   </div>
 
-                  <label className="terms-row terms-box">
+                  {/* O link dos termos saiu de DENTRO do <label> do checkbox:
+                      clicar nele tambem marcava a caixa. */}
+                  <label className="terms-row" htmlFor="register-terms">
                     <input
+                      id="register-terms"
                       type="checkbox"
                       checked={registerForm.acceptedTerms}
                       onChange={(event) =>
@@ -2578,35 +2990,25 @@ function App() {
                       }
                     />
                     <span>
-                      {t("termsAcceptPrefix")}{" "}
-                      <span
-                        className="terms-link"
-                        role="button"
-                        tabIndex={0}
-                        onClick={(event) => {
-                          event.preventDefault();
-                          setTermsOpen(true);
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            setTermsOpen(true);
-                          }
-                        }}
-                      >
-                        {t("termsUse")}
-                      </span>
-                      {" "}{t("termsAcceptSuffix")}
+                      {t("termsAcceptPrefix")} {t("termsUse")} {t("termsAcceptSuffix")}
                     </span>
                   </label>
+                  <button
+                    className="link-button"
+                    type="button"
+                    style={{ justifySelf: "start" }}
+                    onClick={() => setTermsOpen(true)}
+                  >
+                    {t("openTerms")}
+                  </button>
 
-                  <button className="auth-submit" type="submit">
-                    {t("finishRegistration")}
+                  <button type="submit" disabled={authBusy}>
+                    {authBusy ? t("registerBusy") : t("finishRegistration")}
                   </button>
                   <p className="auth-switch-copy">
-                    {t("alreadyAccount")}
+                    {t("alreadyAccount")}{" "}
                     <button
-                      className="auth-toggle"
+                      className="link-button"
                       type="button"
                       onClick={() => setAuthMode("login")}
                     >
@@ -2618,372 +3020,146 @@ function App() {
             </section>
           </div>
         </div>
-      )}
+      ) : (
+        <>
+          {/* ================================================ TRILHO ==== */}
+          <nav className="app-rail" aria-label={t("navMain")}>
+            <span className="rail-brand" aria-hidden="true">
+              L
+            </span>
+            <span className="rail-sep" aria-hidden="true" />
 
-      {termsOpen && (
-        <div className="modal active">
-          <div className="auth-card terms-card">
-            <button className="close-modal close-top" onClick={() => setTermsOpen(false)}>
-              ×
-            </button>
-            <h2>{t("termsTitle")}</h2>
-            <div className="terms-copy">
-              <h3>{t("termsGuide")}</h3>
-              <p>
-                <strong>{t("termsUseTitle")}</strong> {t("termsUseText")}
-              </p>
-              <p>
-                <strong>{t("termsDataTitle")}</strong> {t("termsDataText")}
-              </p>
-              <p>
-                <strong>{t("termsResponsibilityTitle")}</strong>{" "}
-                {t("termsResponsibilityText")}
-              </p>
-            </div>
-            <button onClick={() => setTermsOpen(false)}>
-              {t("termsAcceptButton")}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {profileModalOpen && (
-        <div className="modal active">
-          <div className="modal-content profile-modal">
-            <button
-              className="close-modal close-top"
-              type="button"
-              onClick={() => setProfileModalOpen(false)}
+            <RailButton
+              label={t("navCore")}
+              active={view === "home"}
+              onClick={() => setView("home")}
             >
-              ×
-            </button>
-            <div className="profile-modal-header">
-              <UserAvatar
-                initial={userInitial}
-                photoURL={profileForm.photoURL}
-                className="profile-avatar"
-              />
-              <div>
-                <span className="auth-kicker">{t("userMenuAccount")}</span>
-                <h2>{t("profileTitle")}</h2>
-                <p>{t("profileSubtitle")}</p>
-              </div>
-            </div>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="3.2" />
+                <circle cx="12" cy="12" r="8.2" />
+                <path d="M12 3.8v2M12 18.2v2M3.8 12h2M18.2 12h2" />
+              </svg>
+            </RailButton>
 
-            <div className="profile-form">
-              <section className="profile-section profile-photo-section">
-                <div>
-                  <h3>{t("profilePhoto")}</h3>
-                  <p>{t("profilePhotoHint")}</p>
-                </div>
-                <div className="profile-photo-controls">
-                  <UserAvatar
-                    initial={userInitial}
-                    photoURL={profileForm.photoURL}
-                    className="profile-avatar"
-                  />
-                  <div className="profile-photo-actions">
-                    <label className="file-button">
-                      <input
-                        type="file"
-                        accept="image/png,image/jpeg,image/webp"
-                        onChange={(event) =>
-                          handleProfilePhotoChange(event.target.files?.[0])
-                        }
-                      />
-                      {t("profileChangePhoto")}
-                    </label>
-                    {profileForm.photoURL && (
-                      <button
-                        type="button"
-                        className="button-muted"
-                        onClick={() => {
-                          setProfilePhotoFile(null);
-                          setProfileForm((prev) => ({ ...prev, photoURL: "" }));
-                        }}
-                      >
-                        {t("profileRemovePhoto")}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </section>
+            <RailButton
+              label={t("navCalc")}
+              expanded={drawerOpen}
+              onClick={() => {
+                setView("home");
+                setDrawerOpen((prev) => !prev);
+              }}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="4" y="3" width="16" height="18" rx="2.5" />
+                <path d="M8 8h8M8 12h2M12 12h.01M16 12h.01M8 16h2M12 16h.01M16 16h.01" />
+              </svg>
+            </RailButton>
 
-              <section className="profile-section">
-                <h3>{t("profileIdentity")}</h3>
-                <div className="account-type-switch">
-                  <button
-                    type="button"
-                    className={profileForm.type === "PF" ? "is-active" : ""}
-                    onClick={() =>
-                      setProfileForm((prev) => ({ ...prev, type: "PF" }))
-                    }
-                  >
-                    {t("personPf")}
-                  </button>
-                  <button
-                    type="button"
-                    className={profileForm.type === "PJ" ? "is-active" : ""}
-                    onClick={() =>
-                      setProfileForm((prev) => ({ ...prev, type: "PJ" }))
-                    }
-                  >
-                    {t("personPj")}
-                  </button>
-                </div>
-                <div className="profile-grid">
-                  <label>
-                    <span>{t("profileName")}</span>
-                    <input
-                      type="text"
-                      value={profileForm.nome}
-                      onChange={(event) =>
-                        setProfileForm((prev) => ({
-                          ...prev,
-                          nome: event.target.value,
-                        }))
-                      }
-                    />
-                  </label>
-                  <label>
-                    <span>{profileForm.type === "PF" ? "CPF" : "CNPJ"}</span>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      value={profileForm.doc}
-                      onChange={(event) =>
-                        setProfileForm((prev) => ({
-                          ...prev,
-                          doc: formatDoc(event.target.value, profileForm.type),
-                        }))
-                      }
-                    />
-                  </label>
-                  <label>
-                    <span>{t("profilePhone")}</span>
-                    <input
-                      type="tel"
-                      inputMode="tel"
-                      value={profileForm.phone}
-                      onChange={(event) =>
-                        setProfileForm((prev) => ({
-                          ...prev,
-                          phone: formatPhone(event.target.value),
-                        }))
-                      }
-                    />
-                  </label>
-                </div>
-              </section>
+            <RailButton
+              label={t("navAccounts")}
+              active={view === "accounts"}
+              onClick={() => setView("accounts")}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 6h16M4 12h16M4 18h10" />
+                <circle cx="18.5" cy="18" r="2.2" />
+              </svg>
+            </RailButton>
 
-              <section className="profile-section">
-                <h3>{t("profileAccess")}</h3>
-                <div className="profile-grid two">
-                  <label>
-                    <span>{t("profileUser")}</span>
-                    <input
-                      type="text"
-                      autoComplete="username"
-                      value={profileForm.user}
-                      onChange={(event) =>
-                        setProfileForm((prev) => ({
-                          ...prev,
-                          user: event.target.value,
-                        }))
-                      }
-                    />
-                  </label>
-                  <label>
-                    <span>{t("profileEmail")}</span>
-                    <input
-                      type="email"
-                      autoComplete="email"
-                      value={profileForm.email}
-                      onChange={(event) =>
-                        setProfileForm((prev) => ({
-                          ...prev,
-                          email: event.target.value,
-                        }))
-                      }
-                    />
-                  </label>
-                </div>
-                <div className="profile-grid two">
-                  <label>
-                    <span>{t("profileCurrentPassword")}</span>
-                    <input
-                      type="password"
-                      autoComplete="current-password"
-                      placeholder={t("profileCurrentPasswordPlaceholder")}
-                      value={profileForm.currentPassword}
-                      onChange={(event) =>
-                        setProfileForm((prev) => ({
-                          ...prev,
-                          currentPassword: event.target.value,
-                        }))
-                      }
-                    />
-                  </label>
-                  <label>
-                    <span>{t("profileNewPassword")}</span>
-                    <input
-                      type="password"
-                      autoComplete="new-password"
-                      placeholder={t("profilePasswordPlaceholder")}
-                      value={profileForm.newPassword}
-                      onChange={(event) =>
-                        setProfileForm((prev) => ({
-                          ...prev,
-                          newPassword: event.target.value,
-                        }))
-                      }
-                    />
-                  </label>
-                </div>
-                <div className="profile-grid two">
-                  <label>
-                    <span>{t("profileConfirmPassword")}</span>
-                    <input
-                      type="password"
-                      autoComplete="new-password"
-                      placeholder={t("profilePasswordPlaceholder")}
-                      value={profileForm.confirmPassword}
-                      onChange={(event) =>
-                        setProfileForm((prev) => ({
-                          ...prev,
-                          confirmPassword: event.target.value,
-                        }))
-                      }
-                    />
-                  </label>
-                </div>
-              </section>
-            </div>
+            <RailButton
+              label={t("navSettings")}
+              active={view === "settings"}
+              onClick={() => setView("settings")}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="3.2" />
+                <path d="M19.2 14.6a1.5 1.5 0 0 0 .3 1.65l.05.06a1.8 1.8 0 1 1-2.55 2.55l-.06-.06a1.5 1.5 0 0 0-2.55 1.07v.17a1.8 1.8 0 1 1-3.6 0v-.09a1.5 1.5 0 0 0-2.61-1.01l-.06.06a1.8 1.8 0 1 1-2.55-2.55l.06-.06A1.5 1.5 0 0 0 4.1 13.9h-.17a1.8 1.8 0 1 1 0-3.6h.09a1.5 1.5 0 0 0 1.01-2.61l-.06-.06a1.8 1.8 0 1 1 2.55-2.55l.06.06a1.5 1.5 0 0 0 1.65.3h.08a1.5 1.5 0 0 0 .9-1.37v-.17a1.8 1.8 0 1 1 3.6 0v.09a1.5 1.5 0 0 0 2.61 1.01l.06-.06a1.8 1.8 0 1 1 2.55 2.55l-.06.06a1.5 1.5 0 0 0-.3 1.65v.08a1.5 1.5 0 0 0 1.37.9h.17a1.8 1.8 0 1 1 0 3.6h-.09a1.5 1.5 0 0 0-1.37.9z" />
+              </svg>
+            </RailButton>
 
-            <div className="modal-buttons">
-              {profileSaving && (
-                <div className="profile-save-status">
-                  {t("profileSavingStatus")}
-                </div>
-              )}
-              <button
-                type="button"
-                disabled={profileSaving}
-                onClick={() => void handleSaveProfile()}
-              >
-                {profileSaving ? t("profileSaving") : t("profileSave")}
-              </button>
-              <button
-                type="button"
-                className="button-muted"
-                disabled={profileSaving}
-                onClick={() => setProfileModalOpen(false)}
-              >
-                {t("profileCancel")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <button
-        className={sidebarOpen ? "hamburger active" : "hamburger"}
-        onClick={() => setSidebarOpen((prev) => !prev)}
-      >
-        <span />
-        <span />
-        <span />
-      </button>
-
-      <aside className={sidebarOpen ? "sidebar active" : "sidebar"}>
-        <h2>{t("sidebarTitle")}</h2>
-
-        <div className="sidebar-section">
-          <button className="marca-btn section-toggle" onClick={() => setView("settings")}>
-            {t("settingsPanel")}
-          </button>
-        </div>
-
-        <div className="sidebar-section">
-          <button className="marca-btn section-toggle" onClick={() => setView("accounts")}>
-            {t("viewAccounts")}
-          </button>
-
-          <div className="submenu">
-            <div id="contasList">
-              {filteredSidebarAccounts.map((account) => (
-                <div
-                  key={account.id}
-                  className={
-                    account.id === selectedAccountId
-                      ? "conta-item selected"
-                      : "conta-item"
-                  }
-                  onClick={() => handleSelectSidebarAccount(account)}
+            <div className="rail-foot">
+              {railModeButtons}
+              <div ref={userMenuRef}>
+                <button
+                  type="button"
+                  className="rail-avatar"
+                  aria-haspopup="menu"
+                  aria-expanded={userMenuOpen}
+                  aria-label={t("openUserMenu")}
+                  onClick={() => setUserMenuOpen((prev) => !prev)}
                 >
-                  <div className="conta-item-wrapper">
-                    <div>
-                      <div className="conta-item-nome">
-                        {account.tipoPeca || t("piece")} - {account.veiculo}
+                  <UserAvatar initial={userInitial} photoURL={displayPhoto} />
+                </button>
+
+                {userMenuOpen && (
+                  <div className="user-pop" role="menu">
+                    <div className="user-pop-head">
+                      <UserAvatar initial={userInitial} photoURL={displayPhoto} />
+                      <div>
+                        <strong>{displayName}</strong>
+                        <span>{displayEmail}</span>
                       </div>
-                      <div className="conta-item-detalhes">{account.marca}</div>
-                      <div className="conta-tipo">
-                        {account.clienteNome || t("ourStock")}
-                      </div>
-                      <div className="conta-data">{formatDate(account.data)}</div>
                     </div>
+
                     <button
-                      className="conta-delete-btn"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        void handleDeleteAccount(account.id);
+                      type="button"
+                      role="menuitem"
+                      className="user-pop-item"
+                      onClick={() => {
+                        setUserMenuOpen(false);
+                        openProfileModal();
                       }}
                     >
-                      ×
+                      {t("userMenuProfile")}
+                    </button>
+
+                    <div className="user-pop-group">
+                      <span>{t("userMenuLanguage")}</span>
+                      <div className="language-switcher">
+                        <button
+                          type="button"
+                          className={locale === "pt-BR" ? "is-active" : ""}
+                          aria-pressed={locale === "pt-BR"}
+                          onClick={() => setLocale("pt-BR")}
+                        >
+                          PT
+                        </button>
+                        <button
+                          type="button"
+                          className={locale === "en-US" ? "is-active" : ""}
+                          aria-pressed={locale === "en-US"}
+                          onClick={() => setLocale("en-US")}
+                        >
+                          EN
+                        </button>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="user-pop-item user-pop-logout"
+                      onClick={() => void handleLogout()}
+                    >
+                      {t("userMenuLogout")}
                     </button>
                   </div>
-                </div>
-              ))}
+                )}
+              </div>
             </div>
-          </div>
-        </div>
+          </nav>
 
-        <div className="sidebar-footer">
-          <button className="marca-btn" onClick={() => void handleLogout()}>
-            {t("userMenuLogout")}
-          </button>
-        </div>
-      </aside>
-
-      {view === "home" && (
-        <>
-          <header>
-            <h1>L.I.L.Y</h1>
-            <p>{t("appSubtitle")}</p>
-            <label className="switch">
-              <input
-                type="checkbox"
-                checked={isBlueMode}
-                onChange={(event) => {
-                  setIsBlueMode(event.target.checked);
-                  setSelectedAccountId(null);
-                  setResults(null);
-                }}
-              />
-              <span className="slider" />
-            </label>
-          </header>
-
-          <main>
-            <section
-              className={
-                lilyAssistantOpen
-                  ? "lily-assistant-panel is-open"
-                  : "lily-assistant-panel"
-              }
-              aria-label={t("lilyAssistantTitle")}
-            >
-              <div className="lily-orbit-stage">
+          {/* ================================================== TELAS ==== */}
+          <main className="app-view">
+            {view === "home" && (
+              <section
+                className={
+                  assistantConsoleOpen ? "core-stage has-console" : "core-stage"
+                }
+                aria-label={t("lilyAssistantTitle")}
+              >
+                {/* O NUCLEO. Solto sobre o fundo: sem card, sem borda, sem
+                    moldura. O desenho dele nao mudou uma linha. */}
                 <button
                   type="button"
                   className={lilyCoreStateClass}
@@ -3001,12 +3177,6 @@ function App() {
                   <span className="lily-core-pulse" />
                 </button>
 
-                {/*
-                 * Saudação + pergunta + chips: o bloco que sobreviveu do
-                 * redesign. Ocupa o lugar do antigo .lily-core-copy, que dizia
-                 * a mesma coisa de forma mais fria e brigava com o núcleo
-                 * maior por espaço no canto do palco.
-                 */}
                 <p className="core-greet">
                   {greetingLine}
                   <span className="core-greet-brand"> · {t("appSubtitle")}</span>
@@ -3014,24 +3184,17 @@ function App() {
                 <h2 className="core-ask">{t("coreAsk")}</h2>
 
                 <div className="core-chips">
+                  {/* Agora o rotulo bate com a acao: o chip ABRE a gaveta,
+                      em vez de so rolar a tela ate um campo. */}
                   <button
                     type="button"
-                    className="core-chip is-hot"
-                    onClick={() => {
-                      // A calculadora nunca saiu da tela: o chip só leva o
-                      // cursor até o primeiro campo dela.
-                      const alvo = document.getElementById("vInicial");
-                      alvo?.scrollIntoView({ block: "center" });
-                      alvo?.focus();
-                    }}
+                    className={drawerOpen ? "core-chip is-on" : "core-chip is-hot"}
+                    aria-expanded={drawerOpen}
+                    onClick={() => setDrawerOpen(true)}
                   >
                     {t("coreChipCalc")}
                   </button>
-                  <button
-                    type="button"
-                    className="core-chip"
-                    onClick={handleNewAccount}
-                  >
+                  <button type="button" className="core-chip" onClick={handleNewAccount}>
                     {t("coreChipNewAccount")}
                   </button>
                   <button
@@ -3057,8 +3220,6 @@ function App() {
                   </button>
                 </div>
 
-                {/* Os dois cards de chat. Ficam sempre visíveis, como na foto;
-                    clicar em um escolhe o modo e já abre o console dele. */}
                 <div className="lily-mode-satellites" aria-label={t("lilyChooseMode")}>
                   <button
                     type="button"
@@ -3067,12 +3228,15 @@ function App() {
                         ? "lily-mini is-active"
                         : "lily-mini"
                     }
+                    aria-pressed={lilyAssistantOpen && lilyAssistantMode === "voice"}
                     onClick={() => {
                       setLilyAssistantMode("voice");
                       setLilyAssistantOpen(true);
                     }}
                   >
-                    <span className="lily-mini-orb">V</span>
+                    <span className="lily-mini-orb" aria-hidden="true">
+                      V
+                    </span>
                     <strong>{t("lilyVoiceMode")}</strong>
                   </button>
                   <button
@@ -3082,721 +3246,1157 @@ function App() {
                         ? "lily-mini is-active"
                         : "lily-mini"
                     }
+                    aria-pressed={lilyAssistantOpen && lilyAssistantMode === "chat"}
                     onClick={() => {
                       setLilyAssistantMode("chat");
                       setLilyAssistantOpen(true);
                     }}
                   >
-                    <span className="lily-mini-orb">M</span>
+                    <span className="lily-mini-orb" aria-hidden="true">
+                      M
+                    </span>
                     <strong>{t("lilyMessageMode")}</strong>
                   </button>
                 </div>
-              </div>
 
-              {lilyAssistantOpen && lilyAssistantMode === "voice" && (
-                <div className="lily-voice-console">
-                  <div>
-                    <span className="lily-kicker">{t("lilyVoiceMode")}</span>
-                    <h3>{lilyVoiceLabel}</h3>
-                    <p>
-                      {isTauriRuntime
-                        ? t("lilyVoiceHintActive")
-                        : t("lilyVoiceWebHint")}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    className={
-                      lilyVoiceStatus === "active"
-                        ? "button-muted"
-                        : "lily-primary-action"
-                    }
-                    disabled={
-                      lilyVoiceStatus === "starting" || lilyVoiceStatus === "stopping"
-                    }
-                    onClick={() => void handleToggleLilyVoice()}
-                  >
-                    {lilyVoiceStatus === "active"
-                      ? t("lilyVoiceStop")
-                      : t("lilyVoiceStart")}
-                  </button>
-                </div>
-              )}
-
-              {lilyAssistantOpen && lilyAssistantMode === "chat" && (
-                <div className="lily-chat-card">
-                  <div className="lily-chat-log" aria-live="polite">
-                    {lilyChatMessages.map((message) => (
-                      <div
-                        key={message.id}
-                        className={`lily-chat-message lily-chat-${message.author}`}
-                      >
-                        <span>{message.author === "lily" ? "L.I.L.Y" : displayName}</span>
-                        <p>{message.text}</p>
-                      </div>
-                    ))}
-                    {lilyChatBusy && (
-                      <div className="lily-chat-message lily-chat-lily">
-                        <span>L.I.L.Y</span>
-                        <p>{t("lilyChatThinking")}</p>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="lily-chat-input">
-                    <input
-                      type="text"
-                      value={lilyChatInput}
-                      placeholder={t("lilyChatPlaceholder")}
-                      onChange={(event) => setLilyChatInput(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          event.preventDefault();
-                          void handleSendLilyChat();
-                        }
-                      }}
-                    />
+                {lilyAssistantOpen && lilyAssistantMode === "voice" && (
+                  <div className="lily-voice-console">
+                    <div>
+                      <span className="lily-kicker">{t("lilyVoiceMode")}</span>
+                      <h3>{lilyVoiceLabel}</h3>
+                      <p>
+                        {isTauriRuntime
+                          ? t("lilyVoiceHintActive")
+                          : browserVoiceSupported
+                            ? t("lilyVoiceWebHint")
+                            : t("lilyVoiceDesktopOnly")}
+                      </p>
+                    </div>
                     <button
                       type="button"
-                      disabled={lilyChatBusy || !lilyChatInput.trim()}
-                      onClick={() => void handleSendLilyChat()}
+                      className={
+                        lilyVoiceStatus === "active"
+                          ? "button-muted"
+                          : "lily-primary-action"
+                      }
+                      disabled={
+                        lilyVoiceStatus === "starting" || lilyVoiceStatus === "stopping"
+                      }
+                      onClick={() => void handleToggleLilyVoice()}
                     >
-                      {t("lilyChatSend")}
+                      {lilyVoiceStatus === "active"
+                        ? t("lilyVoiceStop")
+                        : t("lilyVoiceStart")}
+                    </button>
+                  </div>
+                )}
+
+                {lilyAssistantOpen && lilyAssistantMode === "chat" && (
+                  <div className="lily-chat-card">
+                    <div className="lily-chat-log" aria-live="polite" ref={chatLogRef}>
+                      {lilyChatMessages.map((message) => (
+                        <div
+                          key={message.id}
+                          className={`lily-chat-message lily-chat-${message.author}`}
+                        >
+                          <span>
+                            {message.author === "lily" ? "L.I.L.Y" : displayName}
+                          </span>
+                          <p>{message.text}</p>
+                        </div>
+                      ))}
+                      {lilyChatBusy && (
+                        <div className="lily-chat-message lily-chat-lily">
+                          <span>L.I.L.Y</span>
+                          <p>{t("lilyChatThinking")}</p>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="lily-chat-input">
+                      <input
+                        type="text"
+                        aria-label={t("lilyChatPlaceholder")}
+                        value={lilyChatInput}
+                        placeholder={t("lilyChatPlaceholder")}
+                        onChange={(event) => setLilyChatInput(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            void handleSendLilyChat();
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        disabled={lilyChatBusy || !lilyChatInput.trim()}
+                        onClick={() => void handleSendLilyChat()}
+                      >
+                        {t("lilyChatSend")}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </section>
+            )}
+
+            {/* ================================ CONTAS: A CAIXA MORA AQUI */}
+            {view === "accounts" && (
+              <section className="section-box">
+                <div className="section-head">
+                  <div>
+                    <span className="section-kicker">{t("accountsKicker")}</span>
+                    <h1>{t("registeredAccounts")}</h1>
+                    <p>
+                      {visibleAccounts.length}{" "}
+                      {visibleAccounts.length === 1
+                        ? t("accountsShowingOne")
+                        : t("accountsShowingMany")}{" "}
+                      —{" "}
+                      {t("accountsFilterNote")}
+                    </p>
+                  </div>
+                  <button type="button" onClick={handleNewAccount}>
+                    {t("newAccount")}
+                  </button>
+                </div>
+
+                <div className="accounts-toolbar">
+                  <LabeledInput
+                    id="accounts-search"
+                    label={t("accountsSearchLabel")}
+                    placeholder={t("searchVehicleClient")}
+                    value={accountsSearch}
+                    onChange={setAccountsSearch}
+                  />
+                  <SelectField
+                    id="accounts-brand"
+                    label={t("brandLabel")}
+                    value={accountsBrandFilter}
+                    onChange={setAccountsBrandFilter}
+                  >
+                    <option value="">{t("allBrands")}</option>
+                    {marcas.map((marca) => (
+                      <option key={marca} value={marca}>
+                        {marca}
+                      </option>
+                    ))}
+                  </SelectField>
+                  <div>
+                    <span className="field-label">{t("navModeGroup")}</span>
+                    <div className="mode-switch" role="group" aria-label={t("navModeGroup")}>
+                      <button
+                        type="button"
+                        className={isBlueMode ? "" : "is-on-yellow"}
+                        aria-pressed={!isBlueMode}
+                        onClick={() => toggleMode(false)}
+                      >
+                        {t("yellow")}
+                      </button>
+                      <button
+                        type="button"
+                        className={isBlueMode ? "is-on-blue" : ""}
+                        aria-pressed={isBlueMode}
+                        onClick={() => toggleMode(true)}
+                      >
+                        {t("blue")}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {accountsLoading ? (
+                  <div className="empty-state">
+                    <span className="empty-state-glyph" aria-hidden="true">
+                      ◌
+                    </span>
+                    <h3>{t("loadingAccounts")}</h3>
+                  </div>
+                ) : visibleAccounts.length === 0 ? (
+                  /* Dois estados vazios diferentes: nao ter conta nenhuma e o
+                     filtro nao achar nada sao problemas distintos e antes
+                     mostravam a mesma frase. */
+                  <div className="empty-state">
+                    <span className="empty-state-glyph" aria-hidden="true">
+                      {isFiltering || modeAccounts.length > 0 ? "⌕" : "◎"}
+                    </span>
+                    <h3>
+                      {isFiltering || modeAccounts.length > 0
+                        ? t("noResultsTitle")
+                        : t("emptyAccountsTitle")}
+                    </h3>
+                    <p>
+                      {isFiltering || modeAccounts.length > 0
+                        ? t("noResultsHint")
+                        : t("emptyAccountsHint")}
+                    </p>
+                    {!isFiltering && modeAccounts.length === 0 && (
+                      <button type="button" onClick={handleNewAccount}>
+                        {t("coreChipCalc")}
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <div className="account-row-head" aria-hidden="true">
+                      <span>{t("colVehicle")}</span>
+                      <span>{t("colClient")}</span>
+                      <span style={{ textAlign: "right" }}>{t("colTotal")}</span>
+                      <span />
+                    </div>
+
+                    {visibleAccounts.map((account) => (
+                      <div
+                        key={account.id}
+                        className={
+                          account.id === selectedAccountId
+                            ? "account-row is-selected"
+                            : "account-row"
+                        }
+                      >
+                        {/* Selecionar e apagar viraram IRMAOS: antes o botao
+                            de apagar ficava dentro da area clicavel. */}
+                        <button
+                          type="button"
+                          className="account-row-main"
+                          aria-label={`${t("selectAccount")}: ${account.veiculo || t("noVehicle")}`}
+                          onClick={() => handleSelectAccount(account)}
+                        >
+                          <span className="account-row-vehicle">
+                            {account.veiculo || t("noVehicle")} —{" "}
+                            {account.marca || t("general")}
+                          </span>
+                          <span className="account-row-meta">
+                            {account.tipoPeca || t("notInformed")} ·{" "}
+                            {formatDate(account.data, locale)}
+                          </span>
+                        </button>
+                        <span className="account-row-client">
+                          {account.clienteNome || t("walkIn")}
+                        </span>
+                        <span className="account-row-total">
+                          {formatCurrency(account.total, locale)}
+                        </span>
+                        <span className="account-row-actions">
+                          <button
+                            type="button"
+                            className="icon-btn"
+                            aria-label={`${t("editAccount")}: ${account.veiculo || t("noVehicle")}`}
+                            onClick={() => {
+                              handleSelectAccount(account);
+                              setAccountModalOpen(true);
+                            }}
+                          >
+                            ✎
+                          </button>
+                          <button
+                            type="button"
+                            className="icon-btn danger"
+                            aria-label={`${t("deleteAccountAction")}: ${account.veiculo || t("noVehicle")}`}
+                            onClick={() => void handleDeleteAccount(account.id)}
+                          >
+                            ✕
+                          </button>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
+
+            {/* ================================================= AJUSTES */}
+            {view === "settings" && (
+              <section className="section-box">
+                <div className="section-head">
+                  <div>
+                    <span className="section-kicker">{t("settingsKicker")}</span>
+                    <h1>{t("settings")}</h1>
+                    <p>{t("settingsIntro")}</p>
+                  </div>
+                </div>
+                <div className="section-body">
+                  <div className="grid-settings">
+                    {/* Eram <div onClick>: os unicos acessos a estes tres
+                        paineis, e nenhum alcancavel pelo teclado. */}
+                    <button
+                      type="button"
+                      className="setting-card"
+                      onClick={() => setSettingsModal("hora")}
+                    >
+                      <span className="setting-card-icon" aria-hidden="true">
+                        ⏱
+                      </span>
+                      <h3>{t("hourlyValue")}</h3>
+                      <p>{t("hourlyValueDesc")}</p>
+                    </button>
+                    <button
+                      type="button"
+                      className="setting-card"
+                      onClick={() => setSettingsModal("pecas")}
+                    >
+                      <span className="setting-card-icon" aria-hidden="true">
+                        📦
+                      </span>
+                      <h3>{t("pieceTypes")}</h3>
+                      <p>{t("pieceTypesDesc")}</p>
+                    </button>
+                    <button
+                      type="button"
+                      className="setting-card"
+                      onClick={() => setSettingsModal("clientes")}
+                    >
+                      <span className="setting-card-icon" aria-hidden="true">
+                        👤
+                      </span>
+                      <h3>{t("clients")}</h3>
+                      <p>{t("clientsDesc")}</p>
                     </button>
                   </div>
                 </div>
-              )}
-            </section>
+              </section>
+            )}
+          </main>
 
-            <div className="inputs">
-              <FloatingInput
-                id="vInicial"
-                label={t("initialValue")}
-                value={mainInputs.vInicial}
-                onChange={(value) =>
-                  setMainInputs((prev) => ({ ...prev, vInicial: value }))
-                }
-              />
-              <FloatingInput
-                id="frete"
-                label={t("freight")}
-                value={mainInputs.frete}
-                onChange={(value) =>
-                  setMainInputs((prev) => ({ ...prev, frete: value }))
-                }
-              />
-              <FloatingInput
-                id="func"
-                label={t("employee")}
-                value={mainInputs.func}
-                onChange={(value) =>
-                  setMainInputs((prev) => ({ ...prev, func: value }))
-                }
-              />
-              {isBlueMode && (
-                <>
+          {/* ================================================== GAVETA ==== */}
+          <section
+            className={drawerOpen ? "calc-drawer is-open" : "calc-drawer"}
+            aria-label={t("drawerTitle")}
+          >
+            <button
+              type="button"
+              className="calc-drawer-tab"
+              aria-expanded={drawerOpen}
+              aria-controls="calc-drawer-body"
+              onClick={() => setDrawerOpen((prev) => !prev)}
+            >
+              <span className="calc-drawer-label">{t("drawerToggle")}</span>
+              <span className="calc-drawer-sub">{drawerSummary}</span>
+              <span className="calc-drawer-chev" aria-hidden="true">
+                ▾
+              </span>
+            </button>
+
+            {drawerOpen && (
+              <div className="calc-drawer-body" id="calc-drawer-body">
+                <div className="calc-drawer-head">
+                  <span className="pill">
+                    {isBlueMode ? t("drawerModeBlue") : t("drawerModeYellow")}
+                  </span>
+                  {selectedAccount && (
+                    <span className="pill neutral">
+                      {t("drawerAccount")}: {selectedAccount.veiculo || t("noVehicle")}
+                      <button
+                        type="button"
+                        aria-label={t("drawerClearAccount")}
+                        onClick={handleReset}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  )}
+                </div>
+
+                <div className="inputs">
                   <FloatingInput
-                    id="material"
-                    label={t("material")}
-                    value={mainInputs.material}
+                    id="vInicial"
+                    label={t("initialValue")}
+                    value={mainInputs.vInicial}
                     onChange={(value) =>
-                      setMainInputs((prev) => ({ ...prev, material: value }))
+                      setMainInputs((prev) => ({ ...prev, vInicial: value }))
                     }
                   />
                   <FloatingInput
-                    id="horas"
-                    label={t("serviceHours")}
-                    value={mainInputs.horas}
+                    id="frete"
+                    label={t("freight")}
+                    value={mainInputs.frete}
                     onChange={(value) =>
-                      setMainInputs((prev) => ({ ...prev, horas: value }))
+                      setMainInputs((prev) => ({ ...prev, frete: value }))
                     }
                   />
                   <FloatingInput
-                    id="inss"
-                    label="INSS (R$)"
-                    value={mainInputs.inss}
+                    id="func"
+                    label={t("employee")}
+                    value={mainInputs.func}
                     onChange={(value) =>
-                      setMainInputs((prev) => ({ ...prev, inss: value }))
+                      setMainInputs((prev) => ({ ...prev, func: value }))
                     }
                   />
-                </>
-              )}
-            </div>
+                  {isBlueMode && (
+                    <>
+                      <FloatingInput
+                        id="material"
+                        label={t("material")}
+                        value={mainInputs.material}
+                        onChange={(value) =>
+                          setMainInputs((prev) => ({ ...prev, material: value }))
+                        }
+                      />
+                      <FloatingInput
+                        id="horas"
+                        label={t("serviceHours")}
+                        value={mainInputs.horas}
+                        onChange={(value) =>
+                          setMainInputs((prev) => ({ ...prev, horas: value }))
+                        }
+                      />
+                      <FloatingInput
+                        id="inss"
+                        label={t("inss")}
+                        value={mainInputs.inss}
+                        onChange={(value) =>
+                          setMainInputs((prev) => ({ ...prev, inss: value }))
+                        }
+                      />
+                    </>
+                  )}
+                </div>
 
-            <div className="actions-grid">
-              <button onClick={handleCalculate}>{t("calculate")}</button>
-              <button className="button-muted" onClick={handleNewAccount}>
-                {t("newAccount")}
-              </button>
-              <button onClick={() => setAccountModalOpen(true)}>
-                {selectedAccount ? t("editAccount") : t("registerAccount")}
-              </button>
-              <button id="resetar" onClick={handleReset}>
-                {t("clear")}
-              </button>
-            </div>
+                <div className="actions-grid">
+                  <button type="button" onClick={handleCalculate}>
+                    {t("calculate")}
+                  </button>
+                  <button
+                    type="button"
+                    className="button-muted"
+                    onClick={handleNewAccount}
+                  >
+                    {t("newAccount")}
+                  </button>
+                  <button
+                    type="button"
+                    className="button-muted"
+                    onClick={() => setAccountModalOpen(true)}
+                  >
+                    {selectedAccount ? t("editAccount") : t("registerAccount")}
+                  </button>
+                  {/* Acao destrutiva com a cor de acao destrutiva. */}
+                  <button
+                    type="button"
+                    id="resetar"
+                    className="button-danger"
+                    onClick={handleReset}
+                  >
+                    {t("clear")}
+                  </button>
+                </div>
 
-            {results && (
-              <div className="resultado">
-                <h3>{isBlueMode ? t("blueResult") : t("yellowResult")}</h3>
-                <ResultRow label={t("sellFor")} value={formatCurrency(results.venda)} />
-                {selectedAccount?.vendidoPor && (
-                  <ResultRow
-                    label={t("soldFor")}
-                    value={formatCurrency(toNumber(selectedAccount.vendidoPor))}
-                  />
-                )}
-                {selectedAccount?.maoDeObra && (
-                  <ResultRow
-                    label={t("labor")}
-                    value={formatCurrency(toNumber(selectedAccount.maoDeObra))}
-                  />
-                )}
-                <ResultRow label={t("cost")} value={formatCurrency(results.custo)} />
-                <ResultRow
-                  label={t("finalProfit")}
-                  value={formatCurrency(results.lucro)}
-                  strong
-                />
-                {isBlueMode && results.montagem !== undefined && (
-                  <>
+                {results && (
+                  <div className="resultado">
+                    <h3>{isBlueMode ? t("blueResult") : t("yellowResult")}</h3>
                     <ResultRow
-                      label={t("assembly")}
-                      value={formatCurrency(results.montagem)}
+                      label={t("sellFor")}
+                      value={formatCurrency(results.venda, locale)}
+                    />
+                    {selectedAccount?.vendidoPor && (
+                      <ResultRow
+                        label={t("soldFor")}
+                        value={formatCurrency(
+                          toNumber(selectedAccount.vendidoPor),
+                          locale,
+                        )}
+                      />
+                    )}
+                    {selectedAccount?.maoDeObra && (
+                      <ResultRow
+                        label={t("labor")}
+                        value={formatCurrency(
+                          toNumber(selectedAccount.maoDeObra),
+                          locale,
+                        )}
+                      />
+                    )}
+                    <ResultRow
+                      label={t("cost")}
+                      value={formatCurrency(results.custo, locale)}
                     />
                     <ResultRow
-                      label={t("coreAssembly")}
-                      value={formatCurrency(results.cm ?? 0)}
+                      label={t("finalProfit")}
+                      value={formatCurrency(results.lucro, locale)}
+                      strong
                     />
-                    <ResultRow
-                      label={t("assemblySale")}
-                      value={formatCurrency(results.mv ?? 0)}
-                    />
-                  </>
+                    {isBlueMode && results.montagem !== undefined && (
+                      <>
+                        <ResultRow
+                          label={t("assembly")}
+                          value={formatCurrency(results.montagem, locale)}
+                        />
+                        <ResultRow
+                          label={t("coreAssembly")}
+                          value={formatCurrency(results.cm ?? 0, locale)}
+                        />
+                        <ResultRow
+                          label={t("assemblySale")}
+                          value={formatCurrency(results.mv ?? 0, locale)}
+                        />
+                      </>
+                    )}
+                  </div>
                 )}
               </div>
             )}
-          </main>
+          </section>
         </>
       )}
 
-      {view === "settings" && (
-        <section className="page-shell">
-          <div className="container narrow">
-            <header className="page-header simple">
-              <button className="btn-voltar" onClick={() => setView("home")}>
-                ← {t("back")}
+      {/* ==================================================== MODAIS ==== */}
+      {termsOpen && (
+        <Dialog
+          title={t("termsTitle")}
+          kicker={t("termsGuide")}
+          closeLabel={t("closeModal")}
+          onClose={() => setTermsOpen(false)}
+          footer={
+            <>
+              <span />
+              <span />
+              <button type="button" onClick={() => setTermsOpen(false)}>
+                {t("termsAcceptButton")}
               </button>
-              <h1>{t("settings")}</h1>
-            </header>
-
-            <div className="grid-settings">
-              <div className="card" onClick={() => setSettingsModal("hora")}>
-                <i>⏱</i>
-                <h3>{t("hourlyValue")}</h3>
-                <p>{t("hourlyValueDesc")}</p>
-              </div>
-              <div className="card" onClick={() => setSettingsModal("pecas")}>
-                <i>📦</i>
-                <h3>{t("pieceTypes")}</h3>
-                <p>{t("pieceTypesDesc")}</p>
-              </div>
-              <div className="card" onClick={() => setSettingsModal("clientes")}>
-                <i>👤</i>
-                <h3>{t("clients")}</h3>
-                <p>{t("clientsDesc")}</p>
-              </div>
+            </>
+          }
+        >
+          <div className="terms-copy">
+            <div>
+              <h3>{t("termsUseTitle")}</h3>
+              <p>{t("termsUseText")}</p>
+            </div>
+            <div>
+              <h3>{t("termsDataTitle")}</h3>
+              <p>{t("termsDataText")}</p>
+            </div>
+            <div>
+              <h3>{t("termsResponsibilityTitle")}</h3>
+              <p>{t("termsResponsibilityText")}</p>
             </div>
           </div>
-        </section>
+        </Dialog>
       )}
 
-      {view === "accounts" && (
-        <section className="page-shell">
-          <div className="container narrow">
-            <header className="accounts-header">
-              <div className="header-top">
-                <button className="btn-voltar btn-link" onClick={() => setView("home")}>
-                  ← {t("back")}
-                </button>
-                <h1>{t("registeredAccounts")}</h1>
-                <div className="header-spacer" />
-              </div>
-
-              <div className="modo-container">
-                <small>{t("yellow")}</small>
-                <label className="switch compact">
-                  <input
-                    type="checkbox"
-                    checked={isBlueMode}
-                    onChange={(event) => setIsBlueMode(event.target.checked)}
-                  />
-                  <span className="slider" />
-                </label>
-                <small>{t("blue")}</small>
-              </div>
-            </header>
-
-            <div className="filtros-container">
-              <input
-                type="text"
-                placeholder={t("searchVehicleClient")}
-                value={accountsSearch}
-                onChange={(event) => setAccountsSearch(event.target.value)}
-              />
-              <select
-                value={accountsBrandFilter}
-                onChange={(event) => setAccountsBrandFilter(event.target.value)}
+      {profileModalOpen && (
+        <Dialog
+          title={t("profileTitle")}
+          kicker={t("userMenuAccount")}
+          closeLabel={t("closeModal")}
+          onClose={() => setProfileModalOpen(false)}
+          footer={
+            <>
+              <span className="modal-status">
+                {profileSaving ? t("profileSavingStatus") : ""}
+              </span>
+              <button
+                type="button"
+                className="button-muted"
+                disabled={profileSaving}
+                onClick={() => setProfileModalOpen(false)}
               >
-                <option value="">{t("allBrands")}</option>
-                {marcas.map((marca) => (
-                  <option key={marca} value={marca}>
-                    {marca}
-                  </option>
-                ))}
-              </select>
-            </div>
+                {t("profileCancel")}
+              </button>
+              <button
+                type="button"
+                disabled={profileSaving}
+                onClick={() => void handleSaveProfile()}
+              >
+                {profileSaving ? t("profileSaving") : t("profileSave")}
+              </button>
+            </>
+          }
+        >
+          <p className="modal-status">{t("profileSubtitle")}</p>
 
-            <div>
-              {visibleAccounts.length === 0 ? (
-                <p className="empty-state">{t("emptyAccounts")}</p>
-              ) : (
-                visibleAccounts.map((account) => (
-                  <div key={account.id} className="conta-card">
-                    <div className="info">
-                      <h3>
-                        {account.veiculo || t("noVehicle")} -{" "}
-                        {account.marca || t("general")}
-                      </h3>
-                      <p>
-                        <strong>{t("piece")}:</strong>{" "}
-                        {account.tipoPeca || t("notInformed")} |{" "}
-                        <strong>{t("singleClient")}:</strong>{" "}
-                        {account.clienteNome || t("walkIn")}
-                      </p>
-                      <p>
-                        <small>{formatDate(account.data)}</small>
-                      </p>
-                    </div>
-                    <div className="actions">
-                      <div className="valor-tag">{formatCurrency(account.total)}</div>
-                      <button
-                        className="btn-edit"
-                        onClick={() => {
-                          handleSelectSidebarAccount(account);
-                          setAccountModalOpen(true);
-                        }}
-                      >
-                        ✎
-                      </button>
-                      <button
-                        className="btn-del"
-                        onClick={() => void handleDeleteAccount(account.id)}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  </div>
-                ))
+          <section className="form-section">
+            <h3>{t("profilePhoto")}</h3>
+            <p>{t("profilePhotoHint")}</p>
+            <div
+              style={{ display: "flex", gap: "16px", alignItems: "center", flexWrap: "wrap" }}
+            >
+              <UserAvatar
+                initial={userInitial}
+                photoURL={profileForm.photoURL}
+                className="large"
+              />
+              <label className="file-button">
+                {t("profileChangePhoto")}
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  onChange={(event) =>
+                    handleProfilePhotoChange(event.target.files?.[0])
+                  }
+                />
+              </label>
+              {profileForm.photoURL && (
+                <button
+                  type="button"
+                  className="button-muted"
+                  style={{ width: "auto" }}
+                  onClick={() => {
+                    setProfilePhotoFile(null);
+                    setProfileForm((prev) => ({ ...prev, photoURL: "" }));
+                  }}
+                >
+                  {t("profileRemovePhoto")}
+                </button>
               )}
             </div>
-          </div>
-        </section>
+          </section>
+
+          <section className="form-section on-surface-2">
+            <h3>{t("profileIdentity")}</h3>
+            <span className="field-label">{t("profileType")}</span>
+            <div className="account-type-switch">
+              <button
+                type="button"
+                aria-pressed={profileForm.type === "PF"}
+                className={profileForm.type === "PF" ? "is-active" : ""}
+                onClick={() => setProfileForm((prev) => ({ ...prev, type: "PF" }))}
+              >
+                {t("personPf")}
+              </button>
+              <button
+                type="button"
+                aria-pressed={profileForm.type === "PJ"}
+                className={profileForm.type === "PJ" ? "is-active" : ""}
+                onClick={() => setProfileForm((prev) => ({ ...prev, type: "PJ" }))}
+              >
+                {t("personPj")}
+              </button>
+            </div>
+            <div className="form-grid">
+              <LabeledInput
+                id="profile-name"
+                label={t("profileName")}
+                value={profileForm.nome}
+                onChange={(value) =>
+                  setProfileForm((prev) => ({ ...prev, nome: value }))
+                }
+              />
+              <LabeledInput
+                id="profile-doc"
+                label={`${t("profileDoc")} (${profileForm.type === "PF" ? "CPF" : "CNPJ"})`}
+                value={profileForm.doc}
+                onChange={(value) =>
+                  setProfileForm((prev) => ({
+                    ...prev,
+                    doc: formatDoc(value, profileForm.type),
+                  }))
+                }
+              />
+              <LabeledInput
+                id="profile-phone"
+                label={t("profilePhone")}
+                type="tel"
+                value={profileForm.phone}
+                onChange={(value) =>
+                  setProfileForm((prev) => ({ ...prev, phone: formatPhone(value) }))
+                }
+              />
+            </div>
+          </section>
+
+          <section className="form-section on-surface-2">
+            <h3>{t("profileAccess")}</h3>
+            <div className="form-grid">
+              <LabeledInput
+                id="profile-user"
+                label={t("profileUser")}
+                autoComplete="username"
+                value={profileForm.user}
+                onChange={(value) =>
+                  setProfileForm((prev) => ({ ...prev, user: value }))
+                }
+              />
+              <LabeledInput
+                id="profile-email"
+                label={t("profileEmail")}
+                type="email"
+                autoComplete="email"
+                value={profileForm.email}
+                onChange={(value) =>
+                  setProfileForm((prev) => ({ ...prev, email: value }))
+                }
+              />
+              <LabeledInput
+                id="profile-current-password"
+                label={t("profileCurrentPassword")}
+                type="password"
+                autoComplete="current-password"
+                placeholder={t("profileCurrentPasswordPlaceholder")}
+                value={profileForm.currentPassword}
+                onChange={(value) =>
+                  setProfileForm((prev) => ({ ...prev, currentPassword: value }))
+                }
+              />
+              <LabeledInput
+                id="profile-new-password"
+                label={t("profileNewPassword")}
+                type="password"
+                autoComplete="new-password"
+                placeholder={t("profilePasswordPlaceholder")}
+                value={profileForm.newPassword}
+                onChange={(value) =>
+                  setProfileForm((prev) => ({ ...prev, newPassword: value }))
+                }
+              />
+              <LabeledInput
+                id="profile-confirm-password"
+                label={t("profileConfirmPassword")}
+                type="password"
+                autoComplete="new-password"
+                placeholder={t("profilePasswordPlaceholder")}
+                value={profileForm.confirmPassword}
+                onChange={(value) =>
+                  setProfileForm((prev) => ({ ...prev, confirmPassword: value }))
+                }
+              />
+            </div>
+          </section>
+        </Dialog>
       )}
 
       {accountModalOpen && (
-        <div className="modal active">
-          <div className="modal-content account-modal">
-            <div className="account-modal-header">
-              <div>
-                <span>{selectedAccount ? t("editAccount") : t("newAccount")}</span>
-                <h2>{accountModalTitle}</h2>
-              </div>
+        <Dialog
+          title={accountModalTitle}
+          kicker={selectedAccount ? t("editAccount") : t("newAccount")}
+          closeLabel={t("closeModal")}
+          size="wide"
+          onClose={() => setAccountModalOpen(false)}
+          footer={
+            <>
+              <span />
               <button
-                className="close-modal"
-                onClick={() => {
-                  setAccountModalOpen(false);
-                }}
-                aria-label={t("cancel")}
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="account-modal-grid">
-              <section className="account-image-panel">
-                <div>
-                  <h3>{t("accountImageTitle")}</h3>
-                  <p>{t("accountImageSubtitle")}</p>
-                </div>
-
-                <div className="account-image-preview">
-                  {accountImagePreview ? (
-                    <img src={accountImagePreview} alt={accountImageFileName} />
-                  ) : (
-                    <span>{t("accountImagePlaceholder")}</span>
-                  )}
-                </div>
-
-                <div className="account-image-status">{accountImageStatusText}</div>
-
-                <div className="account-image-actions">
-                  <label className="file-button account-image-button">
-                    {t("accountImageUpload")}
-                    <input
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp"
-                      onChange={(event) => {
-                        handleAccountImageFile(event.target.files?.[0]);
-                        event.currentTarget.value = "";
-                      }}
-                    />
-                  </label>
-                  <label className="file-button account-image-button secondary">
-                    {t("accountImageCapture")}
-                    <input
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp"
-                      capture="environment"
-                      onChange={(event) => {
-                        handleAccountImageFile(event.target.files?.[0]);
-                        event.currentTarget.value = "";
-                      }}
-                    />
-                  </label>
-                  <button
-                    className="account-image-button"
-                    disabled={!accountImagePreview || accountImageStatus === "analyzing"}
-                    onClick={applyAccountImageRecognition}
-                  >
-                    {t("accountImageAnalyze")}
-                  </button>
-                  {accountImagePreview && (
-                    <button
-                      className="account-image-button button-muted"
-                      onClick={clearAccountImage}
-                    >
-                      {t("accountImageRemove")}
-                    </button>
-                  )}
-                </div>
-              </section>
-
-              <div className="account-form-panel">
-                <section className="account-form-section">
-                  <h3>{t("accountDataSection")}</h3>
-                  <div className="account-form-grid">
-                    <select
-                      value={accountForm.marca}
-                      onChange={(event) =>
-                        setAccountForm((prev) => ({ ...prev, marca: event.target.value }))
-                      }
-                    >
-                      <option value="">{t("selectBrand")}</option>
-                      {marcas.map((marca) => (
-                        <option key={marca} value={marca}>
-                          {marca}
-                        </option>
-                      ))}
-                    </select>
-
-                    <input
-                      type="text"
-                      placeholder={t("vehicleName")}
-                      value={accountForm.veiculo}
-                      onChange={(event) =>
-                        setAccountForm((prev) => ({ ...prev, veiculo: event.target.value }))
-                      }
-                    />
-
-                    <select
-                      value={accountForm.tipoPeca}
-                      onChange={(event) =>
-                        setAccountForm((prev) => ({ ...prev, tipoPeca: event.target.value }))
-                      }
-                    >
-                      <option value="">{t("selectPieceType")}</option>
-                      {config.pecas.map((piece) => (
-                        <option key={piece} value={piece}>
-                          {piece}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </section>
-
-                <section className="account-form-section">
-                  <h3>{t("accountOwnerSection")}</h3>
-                  <div className="tipo-proprietario">
-                    <label>
-                      <input
-                        type="radio"
-                        name="tipoProprietario"
-                        checked={accountForm.tipoProprietario === "estoque"}
-                        onChange={() =>
-                          setAccountForm((prev) => ({
-                            ...prev,
-                            tipoProprietario: "estoque",
-                          }))
-                        }
-                      />
-                      {t("ourStock")}
-                    </label>
-                    <label>
-                      <input
-                        type="radio"
-                        name="tipoProprietario"
-                        checked={accountForm.tipoProprietario === "cliente"}
-                        onChange={() =>
-                          setAccountForm((prev) => ({
-                            ...prev,
-                            tipoProprietario: "cliente",
-                          }))
-                        }
-                      />
-                      {t("singleClient")}
-                    </label>
-                  </div>
-
-                  {accountForm.tipoProprietario === "cliente" && (
-                    <div className="account-form-grid two">
-                      <select
-                        value={accountForm.clienteSelect}
-                        onChange={(event) =>
-                          setAccountForm((prev) => ({
-                            ...prev,
-                            clienteSelect: event.target.value,
-                          }))
-                        }
-                      >
-                        <option value="">{t("selectRegisteredClient")}</option>
-                        {config.clientes.map((client) => (
-                          <option key={client.id} value={client.id}>
-                            {client.nome} ({client.tipo})
-                          </option>
-                        ))}
-                      </select>
-                      <input
-                        type="text"
-                        placeholder={t("clientPhone")}
-                        value={accountForm.clienteTelefone}
-                        onChange={(event) =>
-                          setAccountForm((prev) => ({
-                            ...prev,
-                            clienteTelefone: formatPhone(event.target.value),
-                          }))
-                        }
-                      />
-                    </div>
-                  )}
-                </section>
-
-                <section className="account-form-section">
-                  <h3>{t("accountValuesSection")}</h3>
-                  <div className="account-form-grid two">
-                    <input
-                      type="text"
-                      placeholder={t("soldByValue")}
-                      value={accountForm.vendidoPorInput}
-                      onChange={(event) =>
-                        setAccountForm((prev) => ({
-                          ...prev,
-                          vendidoPorInput: event.target.value,
-                        }))
-                      }
-                    />
-
-                    <input
-                      type="text"
-                      placeholder={t("laborValue")}
-                      value={accountForm.maoDeObraInput}
-                      onChange={(event) =>
-                        setAccountForm((prev) => ({
-                          ...prev,
-                          maoDeObraInput: event.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                </section>
-              </div>
-            </div>
-
-            <div className="modal-buttons account-modal-actions">
-              <button onClick={() => void handleSaveAccount()}>{accountSaveLabel}</button>
-              <button
+                type="button"
                 className="button-muted"
-                onClick={() => {
-                  setAccountModalOpen(false);
-                }}
+                onClick={() => setAccountModalOpen(false)}
               >
                 {t("cancel")}
               </button>
+              <button type="button" onClick={() => void handleSaveAccount()}>
+                {accountSaveLabel}
+              </button>
+            </>
+          }
+        >
+          <div className="account-modal-grid on-surface-2">
+            <section className="account-image-panel">
+              <h3
+                style={{
+                  margin: 0,
+                  color: "var(--primary)",
+                  fontFamily: "var(--mono)",
+                  fontSize: "0.68rem",
+                  letterSpacing: "0.13em",
+                  textTransform: "uppercase",
+                }}
+              >
+                {t("accountImageTitle")}
+              </h3>
+              <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.82rem" }}>
+                {t("accountImageSubtitle")}
+              </p>
+
+              <div className="account-image-preview">
+                {accountImagePreview ? (
+                  <img src={accountImagePreview} alt={accountImageFileName} />
+                ) : (
+                  <span>{t("accountImagePlaceholder")}</span>
+                )}
+              </div>
+
+              <div className="account-image-status" aria-live="polite">
+                {accountImageStatusText}
+              </div>
+
+              <div className="account-image-actions">
+                <label className="file-button">
+                  {t("accountImageUpload")}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={(event) => {
+                      handleAccountImageFile(event.target.files?.[0]);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                </label>
+                <label className="file-button">
+                  {t("accountImageCapture")}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    capture="environment"
+                    onChange={(event) => {
+                      handleAccountImageFile(event.target.files?.[0]);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  disabled={!accountImagePreview || accountImageStatus === "analyzing"}
+                  onClick={applyAccountImageRecognition}
+                >
+                  {t("accountImageAnalyze")}
+                </button>
+                {accountImagePreview && (
+                  <button
+                    type="button"
+                    className="button-muted"
+                    onClick={clearAccountImage}
+                  >
+                    {t("accountImageRemove")}
+                  </button>
+                )}
+              </div>
+            </section>
+
+            <div style={{ display: "grid", gap: "16px", alignContent: "start" }}>
+              <section className="form-section">
+                <h3>{t("accountDataSection")}</h3>
+                <div className="form-grid three">
+                  <SelectField
+                    id="account-brand"
+                    label={t("brandLabel")}
+                    value={accountForm.marca}
+                    onChange={(value) =>
+                      setAccountForm((prev) => ({ ...prev, marca: value }))
+                    }
+                  >
+                    <option value="">{t("selectBrand")}</option>
+                    {marcas.map((marca) => (
+                      <option key={marca} value={marca}>
+                        {marca}
+                      </option>
+                    ))}
+                  </SelectField>
+
+                  <LabeledInput
+                    id="account-vehicle"
+                    label={t("vehicleLabel")}
+                    placeholder={t("vehicleName")}
+                    value={accountForm.veiculo}
+                    onChange={(value) =>
+                      setAccountForm((prev) => ({ ...prev, veiculo: value }))
+                    }
+                  />
+
+                  <SelectField
+                    id="account-piece"
+                    label={t("pieceTypeLabel")}
+                    value={accountForm.tipoPeca}
+                    onChange={(value) =>
+                      setAccountForm((prev) => ({ ...prev, tipoPeca: value }))
+                    }
+                  >
+                    <option value="">{t("selectPieceType")}</option>
+                    {config.pecas.map((piece) => (
+                      <option key={piece} value={piece}>
+                        {piece}
+                      </option>
+                    ))}
+                  </SelectField>
+                </div>
+              </section>
+
+              <section className="form-section">
+                <h3>{t("accountOwnerSection")}</h3>
+                <div className="radio-row">
+                  <label>
+                    <input
+                      type="radio"
+                      name="tipoProprietario"
+                      checked={accountForm.tipoProprietario === "estoque"}
+                      onChange={() =>
+                        setAccountForm((prev) => ({
+                          ...prev,
+                          tipoProprietario: "estoque",
+                        }))
+                      }
+                    />
+                    {t("ourStock")}
+                  </label>
+                  <label>
+                    <input
+                      type="radio"
+                      name="tipoProprietario"
+                      checked={accountForm.tipoProprietario === "cliente"}
+                      onChange={() =>
+                        setAccountForm((prev) => ({
+                          ...prev,
+                          tipoProprietario: "cliente",
+                        }))
+                      }
+                    />
+                    {t("singleClient")}
+                  </label>
+                </div>
+
+                {accountForm.tipoProprietario === "cliente" && (
+                  <div className="form-grid">
+                    <SelectField
+                      id="account-client"
+                      label={t("registeredClientLabel")}
+                      value={accountForm.clienteSelect}
+                      onChange={(value) =>
+                        setAccountForm((prev) => ({ ...prev, clienteSelect: value }))
+                      }
+                    >
+                      <option value="">{t("selectRegisteredClient")}</option>
+                      {config.clientes.map((client) => (
+                        <option key={client.id} value={client.id}>
+                          {client.nome} ({client.tipo})
+                        </option>
+                      ))}
+                    </SelectField>
+                    <LabeledInput
+                      id="account-client-phone"
+                      label={t("clientPhone")}
+                      type="tel"
+                      value={accountForm.clienteTelefone}
+                      onChange={(value) =>
+                        setAccountForm((prev) => ({
+                          ...prev,
+                          clienteTelefone: formatPhone(value),
+                        }))
+                      }
+                    />
+                  </div>
+                )}
+              </section>
+
+              <section className="form-section">
+                <h3>{t("accountValuesSection")}</h3>
+                <div className="form-grid">
+                  <LabeledInput
+                    id="account-sold-by"
+                    label={t("soldByValue")}
+                    value={accountForm.vendidoPorInput}
+                    onChange={(value) =>
+                      setAccountForm((prev) => ({ ...prev, vendidoPorInput: value }))
+                    }
+                  />
+                  <LabeledInput
+                    id="account-labor"
+                    label={t("laborValue")}
+                    value={accountForm.maoDeObraInput}
+                    onChange={(value) =>
+                      setAccountForm((prev) => ({ ...prev, maoDeObraInput: value }))
+                    }
+                  />
+                </div>
+              </section>
             </div>
           </div>
-        </div>
+        </Dialog>
       )}
 
       {settingsModal === "hora" && (
-        <OverlayModal title={t("hourlyValue")} onClose={() => setSettingsModal(null)}>
-          <input
-            type="text"
-            value={String(config.valorHora)}
-            onChange={(event) =>
-              setConfig((prev) => ({
-                ...prev,
-                valorHora: toNumber(event.target.value),
-              }))
-            }
+        <Dialog
+          title={t("hourlyValue")}
+          kicker={t("settingsKicker")}
+          closeLabel={t("closeModal")}
+          size="narrow"
+          onClose={() => setSettingsModal(null)}
+          footer={
+            <>
+              <span />
+              <button
+                type="button"
+                className="button-muted"
+                onClick={() => setSettingsModal(null)}
+              >
+                {t("cancel")}
+              </button>
+              <button type="button" onClick={() => setSettingsModal(null)}>
+                {t("save")}
+              </button>
+            </>
+          }
+        >
+          <LabeledInput
+            id="settings-hour"
+            label={t("hourlyFieldLabel")}
             placeholder={t("hourlyPlaceholder")}
+            value={String(config.valorHora)}
+            onChange={(value) =>
+              setConfig((prev) => ({ ...prev, valorHora: toNumber(value) }))
+            }
           />
-          <button onClick={() => setSettingsModal(null)}>{t("save")}</button>
-        </OverlayModal>
+        </Dialog>
       )}
 
       {settingsModal === "pecas" && (
-        <OverlayModal title={t("managePieces")} onClose={() => setSettingsModal(null)}>
-          <input
-            type="text"
-            placeholder={t("pieceName")}
-            value={newPiece}
-            onChange={(event) => setNewPiece(event.target.value)}
-          />
-          <button onClick={addPiece}>{t("addPiece")}</button>
-          <div className="data-list">
-            {config.pecas.map((piece, index) => (
-              <div key={`${piece}-${index}`} className="data-item">
-                <span>{piece}</span>
-                <button className="btn-del" onClick={() => removePiece(index)}>
-                  ×
-                </button>
-              </div>
-            ))}
+        <Dialog
+          title={t("managePieces")}
+          kicker={t("settingsKicker")}
+          closeLabel={t("closeModal")}
+          onClose={() => setSettingsModal(null)}
+        >
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "minmax(0, 1fr) auto",
+              gap: "10px",
+              alignItems: "end",
+            }}
+          >
+            <LabeledInput
+              id="settings-piece"
+              label={t("pieceName")}
+              value={newPiece}
+              onChange={setNewPiece}
+            />
+            <button type="button" style={{ width: "auto" }} onClick={addPiece}>
+              {t("addPiece")}
+            </button>
           </div>
-        </OverlayModal>
+
+          <div className="data-list">
+            {config.pecas.length === 0 ? (
+              <p className="modal-status">{t("emptyAccounts")}</p>
+            ) : (
+              config.pecas.map((piece, index) => (
+                <div key={`${piece}-${index}`} className="data-item">
+                  <span>{piece}</span>
+                  <button
+                    type="button"
+                    className="icon-btn danger"
+                    aria-label={`${t("removePieceAction")}: ${piece}`}
+                    onClick={() => removePiece(index)}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </Dialog>
       )}
 
       {settingsModal === "clientes" && (
-        <OverlayModal title={t("registerClient")} onClose={() => setSettingsModal(null)}>
-          <select
+        <Dialog
+          title={t("registerClient")}
+          kicker={t("settingsKicker")}
+          closeLabel={t("closeModal")}
+          onClose={() => setSettingsModal(null)}
+          footer={
+            <>
+              <span />
+              <button
+                type="button"
+                className="button-muted"
+                onClick={() => setSettingsModal(null)}
+              >
+                {t("cancel")}
+              </button>
+              <button type="button" onClick={addClient}>
+                {t("saveClient")}
+              </button>
+            </>
+          }
+        >
+          <SelectField
+            id="client-type"
+            label={t("clientTypeLabel")}
             value={clientType}
-            onChange={(event) => setClientType(event.target.value as ClientType)}
+            onChange={(value) => setClientType(value as ClientType)}
           >
             <option value="PF">{t("personPf")} (PF)</option>
             <option value="PJ">{t("personPj")} (PJ)</option>
-          </select>
+          </SelectField>
 
-          {clientType === "PF" ? (
-            <>
-              <input
-                type="text"
-                placeholder={t("fullName")}
-                value={clientForm.nome}
-                onChange={(event) =>
-                  setClientForm((prev) => ({ ...prev, nome: event.target.value }))
-                }
-              />
-              <input
-                type="text"
-                placeholder={t("nickname")}
-                value={clientForm.apelido}
-                onChange={(event) =>
-                  setClientForm((prev) => ({ ...prev, apelido: event.target.value }))
-                }
-              />
-              <input
-                type="text"
-                placeholder="CPF"
-                value={clientForm.cpf}
-                onChange={(event) =>
-                  setClientForm((prev) => ({
-                    ...prev,
-                    cpf: formatCpf(event.target.value),
-                  }))
-                }
-              />
-            </>
-          ) : (
-            <>
-              <input
-                type="text"
-                placeholder={t("companyName")}
-                value={clientForm.razaoSocial}
-                onChange={(event) =>
-                  setClientForm((prev) => ({
-                    ...prev,
-                    razaoSocial: event.target.value,
-                  }))
-                }
-              />
-              <input
-                type="text"
-                placeholder={t("tradeName")}
-                value={clientForm.nomeFantasia}
-                onChange={(event) =>
-                  setClientForm((prev) => ({
-                    ...prev,
-                    nomeFantasia: event.target.value,
-                  }))
-                }
-              />
-              <input
-                type="text"
-                placeholder="CNPJ"
-                value={clientForm.cnpj}
-                onChange={(event) =>
-                  setClientForm((prev) => ({
-                    ...prev,
-                    cnpj: formatCnpj(event.target.value),
-                  }))
-                }
-              />
-              <input
-                type="text"
-                placeholder={t("stateRegistration")}
-                value={clientForm.inscEstadual}
-                onChange={(event) =>
-                  setClientForm((prev) => ({
-                    ...prev,
-                    inscEstadual: event.target.value,
-                  }))
-                }
-              />
-            </>
-          )}
+          <div className="form-grid">
+            {clientType === "PF" ? (
+              <>
+                <LabeledInput
+                  id="client-name"
+                  label={t("fullName")}
+                  value={clientForm.nome}
+                  onChange={(value) =>
+                    setClientForm((prev) => ({ ...prev, nome: value }))
+                  }
+                />
+                <LabeledInput
+                  id="client-nickname"
+                  label={t("nickname")}
+                  value={clientForm.apelido}
+                  onChange={(value) =>
+                    setClientForm((prev) => ({ ...prev, apelido: value }))
+                  }
+                />
+                <LabeledInput
+                  id="client-cpf"
+                  label="CPF"
+                  value={clientForm.cpf}
+                  onChange={(value) =>
+                    setClientForm((prev) => ({ ...prev, cpf: formatCpf(value) }))
+                  }
+                />
+              </>
+            ) : (
+              <>
+                <LabeledInput
+                  id="client-company"
+                  label={t("companyName")}
+                  value={clientForm.razaoSocial}
+                  onChange={(value) =>
+                    setClientForm((prev) => ({ ...prev, razaoSocial: value }))
+                  }
+                />
+                <LabeledInput
+                  id="client-trade"
+                  label={t("tradeName")}
+                  value={clientForm.nomeFantasia}
+                  onChange={(value) =>
+                    setClientForm((prev) => ({ ...prev, nomeFantasia: value }))
+                  }
+                />
+                <LabeledInput
+                  id="client-cnpj"
+                  label="CNPJ"
+                  value={clientForm.cnpj}
+                  onChange={(value) =>
+                    setClientForm((prev) => ({ ...prev, cnpj: formatCnpj(value) }))
+                  }
+                />
+                <LabeledInput
+                  id="client-ie"
+                  label={t("stateRegistration")}
+                  value={clientForm.inscEstadual}
+                  onChange={(value) =>
+                    setClientForm((prev) => ({ ...prev, inscEstadual: value }))
+                  }
+                />
+              </>
+            )}
 
-          <input
-            type="text"
-            placeholder={t("phone")}
-            value={clientForm.tel}
-            onChange={(event) =>
-              setClientForm((prev) => ({
-                ...prev,
-                tel: formatPhone(event.target.value),
-              }))
-            }
-          />
-          <input
-            type="text"
-            placeholder={t("email")}
-            value={clientForm.email}
-            onChange={(event) =>
-              setClientForm((prev) => ({ ...prev, email: event.target.value }))
-            }
-          />
-          <input
-            type="text"
-            placeholder={t("address")}
-            value={clientForm.endereco}
-            onChange={(event) =>
-              setClientForm((prev) => ({
-                ...prev,
-                endereco: event.target.value,
-              }))
-            }
-          />
-
-          <button onClick={addClient}>{t("saveClient")}</button>
+            <LabeledInput
+              id="client-phone"
+              label={t("phone")}
+              type="tel"
+              value={clientForm.tel}
+              onChange={(value) =>
+                setClientForm((prev) => ({ ...prev, tel: formatPhone(value) }))
+              }
+            />
+            <LabeledInput
+              id="client-email"
+              label={t("email")}
+              type="email"
+              value={clientForm.email}
+              onChange={(value) =>
+                setClientForm((prev) => ({ ...prev, email: value }))
+              }
+            />
+            <LabeledInput
+              id="client-address"
+              label={t("address")}
+              value={clientForm.endereco}
+              onChange={(value) =>
+                setClientForm((prev) => ({ ...prev, endereco: value }))
+              }
+            />
+          </div>
 
           <div className="data-list">
             {config.clientes.map((client) => (
@@ -3804,16 +4404,23 @@ function App() {
                 <div>
                   <strong>{client.nome}</strong>{" "}
                   {client.fantasia ? `(${client.fantasia})` : ""}
-                  <div>{t("doc")}: {client.doc}</div>
-                  <div>{t("contact")}: {client.tel || t("noPhone")}</div>
+                  <div className="data-item-meta">
+                    {t("doc")}: {client.doc} · {t("contact")}:{" "}
+                    {client.tel || t("noPhone")}
+                  </div>
                 </div>
-                <button className="btn-del" onClick={() => removeClient(client.id)}>
+                <button
+                  type="button"
+                  className="icon-btn danger"
+                  aria-label={`${t("removeClientAction")}: ${client.nome}`}
+                  onClick={() => removeClient(client.id)}
+                >
                   ×
                 </button>
               </div>
             ))}
           </div>
-        </OverlayModal>
+        </Dialog>
       )}
     </div>
   );
