@@ -49,11 +49,25 @@ type LilyChatMessage = {
   id: number;
   author: "user" | "lily";
   text: string;
+  /* Depois de um calculo, o APP oferece registrar a conta. Quem oferece e
+     o app e nao o modelo, porque o modelo nao tem memoria da conversa e
+     nao saberia o que significa um "sim" na mensagem seguinte. */
+  oferta?: "salvar";
+};
+
+/* O que a L.I.L.Y. pode pedir ao app. A engine ja validou antes de mandar;
+   aqui a gente confere de novo, porque confiar em uma validacao so, do
+   outro lado da rede, e confiar demais. */
+type LilyAcao = {
+  tipo: "calcular" | "salvar" | "modo";
+  modo?: "padrao" | "avancado";
+  campos?: Partial<Record<keyof MainInputs, number>>;
 };
 type LilyWebResponse = {
   reply?: string;
   audio?: string;
   error?: string;
+  acao?: LilyAcao | null;
 };
 type LilyAssistantMode = "voice" | "chat" | null;
 type BrowserSpeechRecognitionResult = {
@@ -281,17 +295,28 @@ const translations = {
     appSubtitle: "From Santa Rita Radiadores",
     // ---- reestrutura 2026-08-31: trilho, gaveta e secoes
     navCore: "Núcleo",
-    navCalc: "Calcular",
+    navCalc: "Calculadora",
     navAccounts: "Contas",
     navSettings: "Ajustes",
     navMain: "Navegação principal",
     navModeGroup: "Filtro de modo de cálculo",
+    modeDialTitle: "Modo de cálculo",
+    modeDialKicker: "Configuração",
+    modeDialHint:
+      "Percorra os setores para ver o que cada modo soma na conta.",
+    modeOpen: "Trocar o modo de cálculo",
+    modeActiveNow: "Ativo agora",
+    modeFields: "campos",
+    modeStandardDesc:
+      "A conta enxuta: valor inicial, frete e funcionário.",
+    modeAdvancedDesc:
+      "Soma material, horas de serviço, INSS e a montagem.",
     openUserMenu: "Abrir menu do usuário",
     drawerTitle: "Calculadora de serviço",
     drawerToggle: "Calcular um serviço",
     drawerIdle: "Preencha os valores e toque em calcular",
-    drawerModeYellow: "Modo amarela",
-    drawerModeBlue: "Modo azul",
+    drawerModeYellow: "Modo padrão",
+    drawerModeBlue: "Modo avançado",
     drawerAccount: "Conta",
     drawerClearAccount: "Limpar conta selecionada",
     finalProfitShort: "lucro final",
@@ -300,7 +325,7 @@ const translations = {
     accountsShowingOne: "conta visível neste modo",
     accountsShowingMany: "contas visíveis neste modo",
     accountsFilterNote:
-      "O switch amarela/azul é um filtro: as contas do outro modo ficam escondidas.",
+      "O modo de cálculo é um filtro: as contas do outro modo ficam escondidas.",
     colVehicle: "Veículo / Peça",
     colClient: "Cliente",
     colTotal: "Total",
@@ -324,7 +349,7 @@ const translations = {
     lilyChatWelcome:
       "Opa, estou por aqui. Pode mandar uma mensagem ou ativar minha voz pelo painel.",
     lilyReplyCalc:
-      "Manda os valores nos campos principais e aperta Calcular. Se quiser guardar, usa Cadastrar Conta depois.",
+      "Abre a gaveta do rodapé, põe os valores e aperta Calcular. Pra guardar, usa Salvar Conta.",
     lilyReplyVoiceDesktop:
       "Pra voz funcionar, ativa o painel e segura ALT enquanto fala comigo.",
     lilyReplyVoiceWeb:
@@ -407,16 +432,18 @@ const translations = {
     coreGreetAfternoon: "Boa tarde",
     coreGreetEvening: "Boa noite",
     coreAsk: "No que a gente trabalha agora?",
-    coreChipCalc: "Calcular um serviço",
-    coreChipNewAccount: "Nova conta",
-    coreChipAccounts: "Ver contas cadastradas",
-    coreChipVoice: "Falar por voz",
+    startNewService: "Começar um serviço novo",
+    newService: "Novo serviço",
+    continueWork: "Continuar",
     lilyVoiceMode: "Chat de voz",
     lilyMessageMode: "Chat mensagem",
     lilyChatPlaceholder: "Digite uma mensagem para a L.I.L.Y...",
     lilyChatSend: "Enviar",
     lilyChatThinking: "L.I.L.Y pensando...",
     lilyChatError: "Não consegui responder agora.",
+    lilyOfferSave: "Quer registrar essa conta?",
+    lilyOfferYes: "Registrar",
+    lilyOfferNo: "Agora não",
     engineOffline:
       "A engine de IA não respondeu. Respondendo pelo modo local, mais limitado.",
     verifyEmailSent:
@@ -479,11 +506,11 @@ const translations = {
     serviceHours: "Horas de Serviço",
     calculate: "Calcular",
     newAccount: "Nova Conta",
+    saveAccount: "Salvar conta",
     editAccount: "Editar Conta",
-    registerAccount: "Cadastrar Conta",
-    clear: "Apagar",
-    yellowResult: "Resultado Amarela",
-    blueResult: "Resultado Azul",
+    clear: "Limpar",
+    yellowResult: "Resultado padrão",
+    blueResult: "Resultado avançado",
     sellFor: "Se Vender Por",
     soldFor: "Vendido Por",
     labor: "Mão de Obra",
@@ -500,8 +527,8 @@ const translations = {
     clients: "Clientes",
     clientsDesc: "Cadastre pessoa física ou jurídica.",
     registeredAccounts: "Contas Cadastradas",
-    yellow: "AMARELA",
-    blue: "AZUL",
+    yellow: "PADRÃO",
+    blue: "AVANÇADO",
     searchVehicleClient: "Buscar veículo ou cliente...",
     allBrands: "Todas as Marcas",
     emptyAccounts: "Nenhum registro encontrado.",
@@ -578,17 +605,25 @@ const translations = {
     appSubtitle: "From Santa Rita Radiadores",
     // ---- restructure 2026-08-31: rail, drawer and sections
     navCore: "Core",
-    navCalc: "Calculate",
+    navCalc: "Calculator",
     navAccounts: "Accounts",
     navSettings: "Settings",
     navMain: "Main navigation",
     navModeGroup: "Calculation mode filter",
+    modeDialTitle: "Calculation mode",
+    modeDialKicker: "Setup",
+    modeDialHint: "Sweep the sectors to see what each mode adds to the math.",
+    modeOpen: "Change the calculation mode",
+    modeActiveNow: "Active now",
+    modeFields: "fields",
+    modeStandardDesc: "The lean math: initial value, freight and labor.",
+    modeAdvancedDesc: "Adds material, service hours, INSS and assembly.",
     openUserMenu: "Open user menu",
     drawerTitle: "Service calculator",
     drawerToggle: "Calculate a service",
     drawerIdle: "Fill in the values and hit calculate",
-    drawerModeYellow: "Yellow mode",
-    drawerModeBlue: "Blue mode",
+    drawerModeYellow: "Standard mode",
+    drawerModeBlue: "Advanced mode",
     drawerAccount: "Account",
     drawerClearAccount: "Clear selected account",
     finalProfitShort: "final profit",
@@ -597,7 +632,7 @@ const translations = {
     accountsShowingOne: "account visible in this mode",
     accountsShowingMany: "accounts visible in this mode",
     accountsFilterNote:
-      "The yellow/blue switch is a filter: accounts from the other mode stay hidden.",
+      "The calculation mode is a filter: accounts from the other mode stay hidden.",
     colVehicle: "Vehicle / Part",
     colClient: "Client",
     colTotal: "Total",
@@ -621,7 +656,7 @@ const translations = {
     lilyChatWelcome:
       "Hey, I am right here. Send me a message or turn my voice on from the panel.",
     lilyReplyCalc:
-      "Type the values in the main fields and hit Calculate. To keep it, use Register Account afterwards.",
+      "Open the bottom drawer, type the values and hit Calculate. To keep it, use Save Account.",
     lilyReplyVoiceDesktop:
       "For voice to work, turn the panel on and hold ALT while you talk to me.",
     lilyReplyVoiceWeb:
@@ -703,16 +738,18 @@ const translations = {
     coreGreetAfternoon: "Good afternoon",
     coreGreetEvening: "Good evening",
     coreAsk: "What are we working on?",
-    coreChipCalc: "Calculate a service",
-    coreChipNewAccount: "New account",
-    coreChipAccounts: "See saved accounts",
-    coreChipVoice: "Talk by voice",
+    startNewService: "Start a new service",
+    newService: "New service",
+    continueWork: "Continue",
     lilyVoiceMode: "Voice chat",
     lilyMessageMode: "Message chat",
     lilyChatPlaceholder: "Type a message to L.I.L.Y...",
     lilyChatSend: "Send",
     lilyChatThinking: "L.I.L.Y is thinking...",
     lilyChatError: "I could not answer right now.",
+    lilyOfferSave: "Want to save this account?",
+    lilyOfferYes: "Save it",
+    lilyOfferNo: "Not now",
     engineOffline:
       "The AI engine did not answer. Falling back to the limited local mode.",
     verifyEmailSent:
@@ -775,11 +812,11 @@ const translations = {
     serviceHours: "Service Hours",
     calculate: "Calculate",
     newAccount: "New Account",
+    saveAccount: "Save account",
     editAccount: "Edit Account",
-    registerAccount: "Register Account",
     clear: "Clear",
-    yellowResult: "Yellow Result",
-    blueResult: "Blue Result",
+    yellowResult: "Standard result",
+    blueResult: "Advanced result",
     sellFor: "Sell For",
     soldFor: "Sold For",
     labor: "Labor",
@@ -796,8 +833,8 @@ const translations = {
     clients: "Clients",
     clientsDesc: "Register individuals or companies.",
     registeredAccounts: "Registered Accounts",
-    yellow: "YELLOW",
-    blue: "BLUE",
+    yellow: "STANDARD",
+    blue: "ADVANCED",
     searchVehicleClient: "Search vehicle or client...",
     allBrands: "All Brands",
     emptyAccounts: "No records found.",
@@ -1160,6 +1197,48 @@ function RailButton(props: {
   );
 }
 
+/* Um setor de anel (rosca) em coordenadas de SVG. Angulo 0 aponta para
+   cima e cresce no sentido horario, que e como a gente le uma roda. */
+function setorAnular(
+  raioInterno: number,
+  raioExterno: number,
+  grauInicio: number,
+  grauFim: number,
+): string {
+  const ponto = (raio: number, grau: number) => {
+    const rad = ((grau - 90) * Math.PI) / 180;
+    return [200 + raio * Math.cos(rad), 200 + raio * Math.sin(rad)];
+  };
+  const [x1, y1] = ponto(raioExterno, grauInicio);
+  const [x2, y2] = ponto(raioExterno, grauFim);
+  const [x3, y3] = ponto(raioInterno, grauFim);
+  const [x4, y4] = ponto(raioInterno, grauInicio);
+  const arcoGrande = grauFim - grauInicio > 180 ? 1 : 0;
+  return [
+    `M ${x1} ${y1}`,
+    `A ${raioExterno} ${raioExterno} 0 ${arcoGrande} 1 ${x2} ${y2}`,
+    `L ${x3} ${y3}`,
+    `A ${raioInterno} ${raioInterno} 0 ${arcoGrande} 0 ${x4} ${y4}`,
+    "Z",
+  ].join(" ");
+}
+
+/* As marquinhas do anel externo: uma por campo que o modo usa. Ver 3 de um
+   lado e 7 do outro conta a diferenca entre os modos sem escrever nada. */
+function marcasDoSetor(quantidade: number, grauInicio: number, grauFim: number) {
+  const vao = (grauFim - grauInicio) / (quantidade + 1);
+  return Array.from({ length: quantidade }, (_, indice) => {
+    const grau = grauInicio + vao * (indice + 1);
+    const rad = ((grau - 90) * Math.PI) / 180;
+    return {
+      x1: 200 + 152 * Math.cos(rad),
+      y1: 200 + 152 * Math.sin(rad),
+      x2: 200 + 168 * Math.cos(rad),
+      y2: 200 + 168 * Math.sin(rad),
+    };
+  });
+}
+
 function ResultRow(props: { label: string; value: string; strong?: boolean }) {
   return (
     <div className={props.strong ? "linha linha-strong" : "linha"}>
@@ -1178,7 +1257,7 @@ function Dialog(props: {
   kicker?: string;
   closeLabel: string;
   onClose: () => void;
-  size?: "narrow" | "wide";
+  size?: "narrow" | "wide" | "radial";
   footer?: ReactNode;
   children: ReactNode;
 }) {
@@ -1243,7 +1322,9 @@ function Dialog(props: {
       ? "modal-card is-wide"
       : props.size === "narrow"
         ? "modal-card is-narrow"
-        : "modal-card";
+        : props.size === "radial"
+          ? "modal-card is-radial"
+          : "modal-card";
 
   return (
     <div
@@ -1314,6 +1395,8 @@ function Toasts(props: { messages: ToastMessage[] }) {
 function App() {
   const [view, setView] = useState<View>("home");
   const [isBlueMode, setIsBlueMode] = useState(false);
+  const [rodaAberta, setRodaAberta] = useState(false);
+  const [modoEmFoco, setModoEmFoco] = useState(false);
   /* A gaveta da calculadora. Fechada por padrao: a home abre no nucleo, e a
      calculadora sobe quando ele pede (chip CALCULAR / botao do trilho) ou
      quando ja existe conta selecionada. */
@@ -1354,6 +1437,9 @@ function App() {
       ),
   );
   const chatLogRef = useRef<HTMLDivElement>(null);
+  const setoresRef = useRef<Array<HTMLButtonElement | null>>([]);
+  const gavetaRef = useRef<HTMLElement>(null);
+  const ofertaRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const [lilyChatInput, setLilyChatInput] = useState("");
   const [lilyChatBusy, setLilyChatBusy] = useState(false);
@@ -1492,6 +1578,58 @@ function App() {
     const log = chatLogRef.current;
     if (log) log.scrollTop = log.scrollHeight;
   }, [lilyChatMessages, lilyChatBusy, lilyAssistantMode, lilyAssistantOpen]);
+
+  /* A gaveta e fixa no rodape e cobre o fim da pagina. O CSS sozinho nao
+     sabe a altura dela, que muda com o modo e com o resultado, entao a
+     gente mede e escreve numa variavel que o padding do conteudo usa.
+     Sem isso, com a gaveta aberta os botoes de registrar nasciam atras
+     dela e nao dava para clicar. */
+  useEffect(() => {
+    const gaveta = gavetaRef.current;
+    if (!gaveta) return;
+
+    const raiz = document.documentElement;
+    const medir = () => {
+      raiz.style.setProperty(
+        "--gaveta-h",
+        `${Math.round(gaveta.getBoundingClientRect().height)}px`,
+      );
+    };
+
+    medir();
+    if (typeof ResizeObserver === "undefined") return;
+    const observador = new ResizeObserver(medir);
+    observador.observe(gaveta);
+    return () => {
+      observador.disconnect();
+      raiz.style.removeProperty("--gaveta-h");
+    };
+  }, [view, drawerOpen]);
+
+  /* Quando ela calcula pelo chat, a oferta de registrar nasce atras da
+     gaveta. O scrollIntoView nao resolve: para o navegador o elemento ja
+     esta dentro da janela, ele nao sabe que tem uma gaveta fixa por cima.
+     Entao a gente mede a sobra ate o topo da gaveta e rola exatamente
+     isso. */
+  useEffect(() => {
+    const oferta = ofertaRef.current;
+    if (!oferta) return;
+
+    const id = window.setTimeout(() => {
+      const alvo = oferta.getBoundingClientRect();
+      const teto = gavetaRef.current
+        ? gavetaRef.current.getBoundingClientRect().top
+        : window.innerHeight;
+      const sobra = alvo.bottom - teto + 16;
+      if (sobra > 0) {
+        window.scrollBy({ top: sobra, behavior: "smooth" });
+      } else if (alvo.top < 0) {
+        window.scrollBy({ top: alvo.top - 16, behavior: "smooth" });
+      }
+    }, 260);
+
+    return () => window.clearTimeout(id);
+  }, [lilyChatMessages]);
 
   /* O menu do usuario so fechava clicando de novo no gatilho. */
   useEffect(() => {
@@ -1725,11 +1863,6 @@ function App() {
     setResults(calculateResults(mainInputs, isBlueMode, config.valorHora || 40));
   }
 
-  function handleReset() {
-    setMainInputs(defaultMainInputs);
-    setSelectedAccountId(null);
-    setResults(null);
-  }
 
   async function handleToggleLilyVoice() {
     if (lilyVoiceStatus === "starting" || lilyVoiceStatus === "stopping") return;
@@ -1864,6 +1997,60 @@ function App() {
     await handleLilyIncomingMessage(message, lilyVoiceStatus === "active");
   }
 
+  /* Roda o que a L.I.L.Y. pediu. Devolve o resultado quando ela calculou,
+     para o chat saber se cabe oferecer o registro logo em seguida.
+
+     Tudo que ela faz aqui e visivel e desfazivel: os campos se preenchem
+     na frente do chefe e o LIMPAR volta atras. O que ela NAO faz e
+     gravar: "salvar" so abre o formulario, e quem confirma e ele. */
+  function executarAcaoDaLily(acao: LilyAcao): Results | null {
+    if (acao.tipo === "modo") {
+      if (!acao.modo) return null;
+      toggleMode(acao.modo === "avancado");
+      return null;
+    }
+
+    if (acao.tipo === "salvar") {
+      setAccountModalOpen(true);
+      return null;
+    }
+
+    if (!acao.campos) return null;
+
+    const avancado = acao.modo ? acao.modo === "avancado" : isBlueMode;
+    /* Monto o objeto aqui e calculo em cima dele em vez de ler o estado
+       depois: setState e assincrono, e calcular lendo mainInputs usaria os
+       valores velhos. O numero continua saindo do calculateResults; ela so
+       trouxe os valores. */
+    const novos: MainInputs = { ...mainInputs };
+    let mexeu = false;
+    for (const [chave, valor] of Object.entries(acao.campos)) {
+      if (!(chave in defaultMainInputs)) continue;
+      if (typeof valor !== "number" || !Number.isFinite(valor)) continue;
+      novos[chave as keyof MainInputs] = String(valor);
+      mexeu = true;
+    }
+    if (!mexeu) return null;
+
+    if (acao.modo) setIsBlueMode(avancado);
+    setSelectedAccountId(null);
+    setMainInputs(novos);
+    setDrawerOpen(true);
+    const calculado = calculateResults(novos, avancado, config.valorHora || 40);
+    setResults(calculado);
+    return calculado;
+  }
+
+  function dispensarOferta(idDaMensagem: number) {
+    setLilyChatMessages((prev) =>
+      prev.map((mensagem) =>
+        mensagem.id === idDaMensagem
+          ? { ...mensagem, oferta: undefined }
+          : mensagem,
+      ),
+    );
+  }
+
   async function handleLilyIncomingMessage(message: string, shouldSpeak: boolean) {
     const userMessage: LilyChatMessage = {
       id: Date.now(),
@@ -1891,12 +2078,16 @@ function App() {
         ? await invoke<string>("ask_lily_chat", { message, speak: shouldSpeak })
         : webReply?.reply || createLocalLilyReply(message);
 
+      const acao = isTauriRuntime ? null : webReply?.acao ?? null;
+      const calculado = acao ? executarAcaoDaLily(acao) : null;
+
       setLilyChatMessages((prev) => [
         ...prev,
         {
           id: Date.now() + 1,
           author: "lily",
           text: reply || createLocalLilyReply(message),
+          oferta: calculado ? "salvar" : undefined,
         },
       ]);
       if (shouldSpeak && !isTauriRuntime) {
@@ -1920,12 +2111,73 @@ function App() {
     }
   }
 
+  /* O que vai junto da pergunta para a L.I.L.Y. enxergar a tela. Vao os
+     numeros do servico e a identificacao do veiculo. NAO vai nome de
+     cliente: e dado de terceiro, sai da maquina do chefe rumo a Groq e
+     ao Gemini, e nao ajuda em nada a responder sobre calculo.
+
+     Os valores seguem ja formatados pelo locale da tela, para ela nunca
+     citar um numero escrito diferente do que esta aparecendo. */
+  function montarContextoDaLily() {
+    const campos: Record<string, string> = {};
+    const emDinheiro: Array<[keyof MainInputs, string]> = [
+      ["vInicial", "valor inicial"],
+      ["frete", "frete"],
+      ["func", "funcionario"],
+      ["material", "material"],
+      ["inss", "INSS"],
+    ];
+    for (const [chave, rotulo] of emDinheiro) {
+      const valor = toNumber(mainInputs[chave]);
+      if (valor) campos[rotulo] = formatCurrency(valor, locale);
+    }
+    // Horas e quantidade, nao dinheiro: mandar com R$ seria mentira.
+    const horas = toNumber(mainInputs.horas);
+    if (horas) campos["horas de servico"] = String(horas);
+
+    const resultado: Record<string, string> = {};
+    if (results) {
+      resultado["se vender por"] = formatCurrency(results.venda, locale);
+      resultado["custo"] = formatCurrency(results.custo, locale);
+      resultado["lucro final"] = formatCurrency(results.lucro, locale);
+      if (results.montagem !== undefined) {
+        resultado["montagem"] = formatCurrency(results.montagem, locale);
+      }
+      if (results.cm !== undefined) {
+        resultado["custo da montagem"] = formatCurrency(results.cm, locale);
+      }
+      if (results.mv !== undefined) {
+        resultado["montagem + venda"] = formatCurrency(results.mv, locale);
+      }
+    }
+
+    return {
+      modo: isBlueMode ? "avancado" : "padrao",
+      valorHora: formatCurrency(config.valorHora || 40, locale),
+      campos,
+      resultado,
+      contaSelecionada: selectedAccount
+        ? {
+            veiculo: selectedAccount.veiculo,
+            marca: selectedAccount.marca,
+            peca: selectedAccount.tipoPeca,
+          }
+        : null,
+      contasNoModo: accounts.filter((conta) => conta.modo === isBlueMode)
+        .length,
+    };
+  }
+
   async function askLilyWeb(message: string, speak: boolean) {
     try {
       const response = await fetch(`${lilyWebServerUrl}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message, speak }),
+        body: JSON.stringify({
+          message,
+          speak,
+          contexto: montarContextoDaLily(),
+        }),
         // Sem timeout, uma porta filtrada deixava o fetch pendurado para
         // sempre: lilyChatBusy nunca voltava e o botao Enviar morria.
         signal: AbortSignal.timeout(8000),
@@ -2055,7 +2307,13 @@ function App() {
   function createLocalLilyReply(message: string) {
     const normalized = message.toLowerCase();
     /* Este e o texto que ele MAIS ve, porque e o fallback de quando a engine
-       esta desligada. Os gatilhos aceitam os termos nos dois idiomas. */
+       esta desligada. Os gatilhos aceitam os termos nos dois idiomas.
+
+       MANUTENCAO: estas respostas citam botoes e telas pelo nome. Quando
+       renomear algo na interface, corrija aqui E no LILY_SYSTEM_PROMPT em
+       engine/lily_bridge.py — sao os dois lugares onde a L.I.L.Y. guarda o
+       que ela acha que sabe do app. Ja aconteceu de ela mandar clicar em
+       Cadastrar Conta depois que o botao virou Salvar Conta. */
     if (
       normalized.includes("calcular") ||
       normalized.includes("calculate") ||
@@ -2147,12 +2405,20 @@ function App() {
     notify(t("accountImageDone"), "success");
   }
 
-  function handleNewAccount() {
+  /* O "limpar" da gaveta e o "começar um serviço novo" faziam a mesma
+     faxina por caminhos diferentes: handleReset zerava três coisas e
+     handleNewAccount zerava cinco. Agora a faxina é uma só e quem navega
+     é o chamador — o limpar da gaveta não te arranca da tela onde está. */
+  function limparServico() {
     setSelectedAccountId(null);
     setMainInputs(defaultMainInputs);
     setResults(null);
     setAccountForm(defaultAccountForm);
     clearAccountImage();
+  }
+
+  function handleNewAccount() {
+    limparServico();
     setView("home");
     setDrawerOpen(true);
   }
@@ -2717,7 +2983,7 @@ function App() {
   });
 
   const selectedAccount = accounts.find((account) => account.id === selectedAccountId);
-  const accountModalTitle = selectedAccount ? t("editAccount") : t("registerAccount");
+  const accountModalTitle = selectedAccount ? t("editAccount") : t("saveAccount");
   const accountSaveLabel = selectedAccount ? t("update") : t("confirm");
   const assistantConsoleOpen = lilyAssistantOpen && lilyAssistantMode !== null;
   const isFiltering = Boolean(accountsSearch || accountsBrandFilter);
@@ -2736,37 +3002,182 @@ function App() {
       ? `${t("finalProfitShort")} ${formatCurrency(results.lucro, locale)}`
       : t("drawerIdle");
 
+  /* O chip de continuar só existe quando há trabalho em andamento, e diz
+     O QUE vai continuar. Um botão genérico ali seria só mais uma cópia do
+     trilho, que é justamente o que estamos tirando da tela. */
+  const trabalhoEmAndamento = Boolean(selectedAccount || results);
+  const continueLabel = selectedAccount
+    ? `${t("continueWork")}: ${selectedAccount.veiculo || t("noVehicle")}`
+    : results
+      ? `${t("continueWork")}: ${t("finalProfitShort")} ${formatCurrency(results.lucro, locale)}`
+      : "";
+
   function toggleMode(nextBlue: boolean) {
     setIsBlueMode(nextBlue);
     setSelectedAccountId(null);
     setResults(null);
   }
 
+  function abrirRodaDeModo() {
+    setModoEmFoco(isBlueMode);
+    setRodaAberta(true);
+  }
+
+  function escolherModo(avancado: boolean) {
+    toggleMode(avancado);
+    setRodaAberta(false);
+  }
+
+  /* O setor da esquerda e o padrao, o da direita e o avancado. Os angulos
+     deixam uma fresta entre os dois, como na roda de acao que ele mandou. */
+  const SETORES = [
+    {
+      avancado: false,
+      inicio: 184,
+      fim: 356,
+      campos: 3,
+      nome: t("yellow"),
+      desc: t("modeStandardDesc"),
+    },
+    {
+      avancado: true,
+      inicio: 4,
+      fim: 176,
+      campos: 7,
+      nome: t("blue"),
+      desc: t("modeAdvancedDesc"),
+    },
+  ];
+
+  const setorEmFoco = SETORES[modoEmFoco ? 1 : 0];
+
+  const rodaDeModo = rodaAberta && (
+    <Dialog
+      title={t("modeDialTitle")}
+      kicker={t("modeDialKicker")}
+      closeLabel={t("cancel")}
+      onClose={() => setRodaAberta(false)}
+      size="radial"
+    >
+      <p className="mode-wheel-hint">{t("modeDialHint")}</p>
+
+      <div
+        className="mode-wheel"
+        role="radiogroup"
+        aria-label={t("modeDialTitle")}
+        onKeyDown={(event) => {
+          const paraAvancado =
+            event.key === "ArrowRight" || event.key === "ArrowDown"
+              ? true
+              : event.key === "ArrowLeft" || event.key === "ArrowUp"
+                ? false
+                : null;
+          if (paraAvancado === null) return;
+          event.preventDefault();
+          setModoEmFoco(paraAvancado);
+          setoresRef.current[paraAvancado ? 1 : 0]?.focus();
+        }}
+      >
+        {/* O desenho e so pintura: quem responde a teclado e a leitor de
+            tela sao os dois botoes por cima. SVG interativo daria um
+            trabalho de acessibilidade que nao se paga aqui. */}
+        <svg viewBox="0 0 400 400" aria-hidden="true">
+          {SETORES.map((setor) => (
+            <g
+              key={String(setor.avancado)}
+              className={[
+                "mode-sector",
+                setor.avancado ? "is-advanced" : "is-standard",
+                setor.avancado === modoEmFoco ? "is-focused" : "",
+                setor.avancado === isBlueMode ? "is-current" : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+            >
+              <path d={setorAnular(84, 142, setor.inicio, setor.fim)} />
+              {marcasDoSetor(setor.campos, setor.inicio, setor.fim).map(
+                (marca, indice) => (
+                  <line
+                    key={indice}
+                    x1={marca.x1}
+                    y1={marca.y1}
+                    x2={marca.x2}
+                    y2={marca.y2}
+                  />
+                ),
+              )}
+            </g>
+          ))}
+          <circle className="mode-wheel-core" cx="200" cy="200" r="76" />
+        </svg>
+
+        <div className="mode-wheel-center" aria-hidden="true">
+          <strong>{setorEmFoco.nome}</strong>
+          <span>
+            {setorEmFoco.campos} {t("modeFields")}
+          </span>
+          <em
+            className={
+              setorEmFoco.avancado === isBlueMode ? undefined : "is-idle"
+            }
+          >
+            {t("modeActiveNow")}
+          </em>
+        </div>
+
+        {SETORES.map((setor, indice) => (
+          <button
+            key={String(setor.avancado)}
+            type="button"
+            role="radio"
+            aria-checked={setor.avancado === modoEmFoco}
+            aria-label={`${setor.nome} — ${setor.desc}`}
+            tabIndex={setor.avancado === modoEmFoco ? 0 : -1}
+            ref={(elemento) => {
+              setoresRef.current[indice] = elemento;
+            }}
+            className={
+              setor.avancado
+                ? "mode-sector-hit is-advanced"
+                : "mode-sector-hit is-standard"
+            }
+            onMouseEnter={() => setModoEmFoco(setor.avancado)}
+            onFocus={() => setModoEmFoco(setor.avancado)}
+            onClick={() => escolherModo(setor.avancado)}
+          />
+        ))}
+      </div>
+
+      <p className="mode-wheel-desc" aria-live="polite">
+        {setorEmFoco.desc}
+      </p>
+    </Dialog>
+  );
+
+  /* Era um par de botoes escrito AM e AZ — as duas primeiras letras de
+     AMARELA e AZUL, cortadas no codigo com slice(0, 2). Em ingles isso
+     virava YE e BL. Agora e um alvo redondo que abre a roda. */
   const railModeButtons = (
-    <div className="rail-mode" role="group" aria-label={t("navModeGroup")}>
-      <button
-        type="button"
-        className={isBlueMode ? "" : "is-on-yellow"}
-        aria-pressed={!isBlueMode}
-        onClick={() => toggleMode(false)}
-      >
-        <span aria-hidden="true">{t("yellow").slice(0, 2)}</span>
-        <span className="sr-only">{t("yellow")}</span>
-      </button>
-      <button
-        type="button"
-        className={isBlueMode ? "is-on-blue" : ""}
-        aria-pressed={isBlueMode}
-        onClick={() => toggleMode(true)}
-      >
-        <span aria-hidden="true">{t("blue").slice(0, 2)}</span>
-        <span className="sr-only">{t("blue")}</span>
-      </button>
-    </div>
+    <button
+      type="button"
+      className={
+        isBlueMode ? "rail-mode-trigger is-advanced" : "rail-mode-trigger"
+      }
+      aria-haspopup="dialog"
+      aria-expanded={rodaAberta}
+      aria-label={`${t("modeOpen")} — ${isBlueMode ? t("blue") : t("yellow")}`}
+      onClick={abrirRodaDeModo}
+    >
+      <span className="rail-mode-dot" aria-hidden="true" />
+      <span className="rail-tip" aria-hidden="true">
+        {isBlueMode ? t("blue") : t("yellow")}
+      </span>
+    </button>
   );
 
   return (
     <div className={isBlueMode ? "app-shell azul" : "app-shell"}>
+      {rodaDeModo}
       {/* A pele de HUD que antes era o fundo do card do nucleo. Agora e a
           tela inteira, bem mais fraca: o efeito fica, a caixa nao. */}
       <div className="app-bg" aria-hidden="true" />
@@ -3183,41 +3594,28 @@ function App() {
                 </p>
                 <h2 className="core-ask">{t("coreAsk")}</h2>
 
+                {/* Os chips repetiam o trilho: calcular, ver contas e falar
+                    por voz já tinham botão permanente na tela, e o de voz
+                    era código idêntico ao do card logo abaixo. Sobraram os
+                    dois atalhos que o trilho NÃO consegue dar. */}
                 <div className="core-chips">
-                  {/* Agora o rotulo bate com a acao: o chip ABRE a gaveta,
-                      em vez de so rolar a tela ate um campo. */}
                   <button
                     type="button"
-                    className={drawerOpen ? "core-chip is-on" : "core-chip is-hot"}
-                    aria-expanded={drawerOpen}
-                    onClick={() => setDrawerOpen(true)}
+                    className="core-chip is-hot"
+                    onClick={handleNewAccount}
                   >
-                    {t("coreChipCalc")}
+                    {t("startNewService")}
                   </button>
-                  <button type="button" className="core-chip" onClick={handleNewAccount}>
-                    {t("coreChipNewAccount")}
-                  </button>
-                  <button
-                    type="button"
-                    className="core-chip"
-                    onClick={() => setView("accounts")}
-                  >
-                    {t("coreChipAccounts")}
-                  </button>
-                  <button
-                    type="button"
-                    className={
-                      lilyAssistantOpen && lilyAssistantMode === "voice"
-                        ? "core-chip is-on"
-                        : "core-chip"
-                    }
-                    onClick={() => {
-                      setLilyAssistantMode("voice");
-                      setLilyAssistantOpen(true);
-                    }}
-                  >
-                    {t("coreChipVoice")}
-                  </button>
+                  {trabalhoEmAndamento && (
+                    <button
+                      type="button"
+                      className={drawerOpen ? "core-chip is-on" : "core-chip"}
+                      aria-expanded={drawerOpen}
+                      onClick={() => setDrawerOpen(true)}
+                    >
+                      {continueLabel}
+                    </button>
+                  )}
                 </div>
 
                 <div className="lily-mode-satellites" aria-label={t("lilyChooseMode")}>
@@ -3303,6 +3701,27 @@ function App() {
                             {message.author === "lily" ? "L.I.L.Y" : displayName}
                           </span>
                           <p>{message.text}</p>
+                          {message.oferta === "salvar" && (
+                            <div className="lily-chat-oferta" ref={ofertaRef}>
+                              <span>{t("lilyOfferSave")}</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setAccountModalOpen(true);
+                                  dispensarOferta(message.id);
+                                }}
+                              >
+                                {t("lilyOfferYes")}
+                              </button>
+                              <button
+                                type="button"
+                                className="button-muted"
+                                onClick={() => dispensarOferta(message.id)}
+                              >
+                                {t("lilyOfferNo")}
+                              </button>
+                            </div>
+                          )}
                         </div>
                       ))}
                       {lilyChatBusy && (
@@ -3357,7 +3776,7 @@ function App() {
                     </p>
                   </div>
                   <button type="button" onClick={handleNewAccount}>
-                    {t("newAccount")}
+                    {t("newService")}
                   </button>
                 </div>
 
@@ -3432,7 +3851,7 @@ function App() {
                     </p>
                     {!isFiltering && modeAccounts.length === 0 && (
                       <button type="button" onClick={handleNewAccount}>
-                        {t("coreChipCalc")}
+                        {t("startNewService")}
                       </button>
                     )}
                   </div>
@@ -3560,6 +3979,7 @@ function App() {
 
           {/* ================================================== GAVETA ==== */}
           <section
+            ref={gavetaRef}
             className={drawerOpen ? "calc-drawer is-open" : "calc-drawer"}
             aria-label={t("drawerTitle")}
           >
@@ -3589,7 +4009,7 @@ function App() {
                       <button
                         type="button"
                         aria-label={t("drawerClearAccount")}
-                        onClick={handleReset}
+                        onClick={limparServico}
                       >
                         ×
                       </button>
@@ -3652,6 +4072,11 @@ function App() {
                   )}
                 </div>
 
+                {/* Eram quatro botões e dois deles limpavam: "nova conta"
+                    não criava conta nenhuma, zerava o formulário, e ficava
+                    do lado de "cadastrar conta", que salva. Sobraram as duas
+                    ações que fazem coisas diferentes; limpar virou controle
+                    discreto, porque desfazer não é ação principal. */}
                 <div className="actions-grid">
                   <button type="button" onClick={handleCalculate}>
                     {t("calculate")}
@@ -3659,23 +4084,14 @@ function App() {
                   <button
                     type="button"
                     className="button-muted"
-                    onClick={handleNewAccount}
-                  >
-                    {t("newAccount")}
-                  </button>
-                  <button
-                    type="button"
-                    className="button-muted"
                     onClick={() => setAccountModalOpen(true)}
                   >
-                    {selectedAccount ? t("editAccount") : t("registerAccount")}
+                    {selectedAccount ? t("editAccount") : t("saveAccount")}
                   </button>
-                  {/* Acao destrutiva com a cor de acao destrutiva. */}
                   <button
                     type="button"
-                    id="resetar"
-                    className="button-danger"
-                    onClick={handleReset}
+                    className="action-clear"
+                    onClick={limparServico}
                   >
                     {t("clear")}
                   </button>

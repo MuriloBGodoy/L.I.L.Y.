@@ -223,10 +223,6 @@ a {
 
 .rail-btn:focus-visible,
 .rail-avatar:focus-visible,
-.rail-mode button:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
-}
 
 /* Ícone sem rótulo é problema de acessibilidade: além do aria-label, todo
    botão do trilho mostra o nome no hover e no foco. */
@@ -265,38 +261,214 @@ a {
   width: 100%;
 }
 
-.rail-mode {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 3px;
-  border: 1px solid var(--line);
-  border-radius: 11px;
+/* O gatilho da roda: um alvo redondo com a cor do modo ativo. A cor e a
+   assinatura do modo e nao acompanha o tema — o avancado e ciano em
+   qualquer pele, senao "avancado" ficaria amarelo no tema ciano. */
+.rail-mode-trigger {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
   background: #0d0d0d;
+  box-shadow: inset 0 0 0 1px var(--line-2);
+  cursor: pointer;
+  transition: box-shadow 0.16s ease;
 }
 
-.rail-mode button {
-  width: 40px;
-  padding: 6px 0;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
+.rail-mode-trigger:hover {
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.rail-mode-trigger:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.rail-mode-trigger:hover .rail-tip,
+.rail-mode-trigger:focus-visible .rail-tip {
+  opacity: 1;
+}
+
+.rail-mode-dot {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--mode-yellow);
+  box-shadow: 0 0 12px rgba(255, 214, 0, 0.55);
+}
+
+.rail-mode-trigger.is-advanced .rail-mode-dot {
+  background: var(--mode-blue);
+  box-shadow: 0 0 12px rgba(0, 206, 209, 0.55);
+}
+
+/* ==================================== A RODA DE MODO DE CALCULO ==== */
+
+.modal-card.is-radial {
+  width: min(470px, calc(100vw - 28px));
+}
+
+.modal-card.is-radial .modal-body {
+  text-align: center;
+}
+
+.mode-wheel-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.mode-wheel {
+  position: relative;
+  width: min(340px, 100%);
+  margin: 6px auto 0;
+  aspect-ratio: 1;
+}
+
+.mode-wheel svg {
+  width: 100%;
+  height: 100%;
+}
+
+.mode-wheel-core {
+  fill: #0b0b0b;
+  stroke: var(--line-2);
+}
+
+.mode-sector path {
+  fill: rgba(255, 255, 255, 0.045);
+  stroke: var(--line-2);
+  transition: fill 0.18s ease;
+}
+
+.mode-sector line {
+  stroke: var(--line-2);
+  stroke-width: 2;
+  transition: stroke 0.18s ease;
+}
+
+/* O setor do modo em foco acende na cor dele; o modo que esta valendo
+   agora fica com o contorno aceso mesmo sem o cursor em cima. */
+.mode-sector.is-current path {
+  stroke-width: 2;
+}
+
+.mode-sector.is-standard.is-current path {
+  stroke: var(--mode-yellow);
+}
+
+.mode-sector.is-advanced.is-current path {
+  stroke: var(--mode-blue);
+}
+
+.mode-sector.is-standard.is-focused path {
+  fill: rgba(255, 214, 0, 0.16);
+}
+
+.mode-sector.is-advanced.is-focused path {
+  fill: rgba(0, 206, 209, 0.16);
+}
+
+.mode-sector.is-standard.is-focused line {
+  stroke: var(--mode-yellow);
+}
+
+.mode-sector.is-advanced.is-focused line {
+  stroke: var(--mode-blue);
+}
+
+.mode-wheel-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  translate: -50% -50%;
+  display: grid;
+  gap: 3px;
+  width: 38%;
+  pointer-events: none;
+}
+
+.mode-wheel-center strong {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.mode-wheel-center span {
   color: var(--muted);
   font-family: var(--mono);
-  font-size: 0.62rem;
-  font-weight: 700;
+  font-size: 0.64rem;
   letter-spacing: 0.06em;
+}
+
+.mode-wheel-center em {
+  color: var(--primary);
+  font-family: var(--mono);
+  font-size: 0.56rem;
+  font-style: normal;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* Os alvos de clique: transparentes, por cima de cada metade da roda.
+   Assim o teclado e o leitor de tela pegam botoes de verdade em vez de
+   um <path> de SVG. */
+.mode-sector-hit {
+  position: absolute;
+  top: 0;
+  width: 50%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   cursor: pointer;
 }
 
-.rail-mode button.is-on-yellow {
-  background: var(--mode-yellow);
-  color: #111;
+.mode-sector-hit.is-standard {
+  left: 0;
+  border-radius: 999px 0 0 999px;
 }
 
-.rail-mode button.is-on-blue {
-  background: var(--mode-blue);
-  color: #111;
+.mode-sector-hit.is-advanced {
+  right: 0;
+  border-radius: 0 999px 999px 0;
+}
+
+.mode-sector-hit:hover {
+  filter: none;
+}
+
+/* Nada de outline aqui: o alvo de clique e um retangulo por cima de meia
+   roda, e o anel de foco padrao desenhava uma meia-capsula amarela por
+   cima do desenho. Quem sinaliza o foco e o proprio setor, que acende
+   com a cor do modo e muda o texto do centro. */
+.mode-sector-hit:focus-visible {
+  outline: none;
+}
+
+.mode-sector.is-focused path {
+  filter: drop-shadow(0 0 10px rgba(var(--lily-glow-rgb), 0.35));
+}
+
+/* Reserva a linha do ATIVO AGORA para o centro nao pular de posicao
+   quando o modo em foco nao e o que esta valendo. */
+.mode-wheel-center em.is-idle {
+  visibility: hidden;
+}
+
+.mode-wheel-desc {
+  margin: 10px auto 0;
+  min-height: 2.6em;
+  max-width: 38ch;
+  color: var(--muted);
+  font-size: 0.92rem;
 }
 
 .rail-avatar {
@@ -461,7 +633,11 @@ a {
   z-index: 1;
   margin-left: var(--rail-w);
   min-height: 100vh;
-  padding: 34px 30px calc(var(--tab-h) + 34px);
+  /* A gaveta e fixa e cobre o rodape. Reservar so a altura da aba dava
+     conta com ela fechada, mas com ela ABERTA o conteudo de baixo (o
+     chat, e os botoes de registrar que nascem nele) ficava escondido
+     atras. Agora o proprio JS mede a gaveta e escreve aqui. */
+  padding: 34px 30px calc(var(--gaveta-h, var(--tab-h)) + 34px);
 }
 
 /* ================================================ HOME: NÚCLEO LIVRE */
@@ -1174,10 +1350,35 @@ a {
   gap: 16px;
 }
 
+/* Duas ações de peso dividem a largura e o limpar fica ao lado, do tamanho
+   do que ele é. Era um grid de quatro colunas iguais, o que dava a limpar
+   o mesmo peso visual de calcular e de salvar. */
 .actions-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
   gap: 12px;
+}
+
+.actions-grid > button:not(.action-clear) {
+  flex: 1 1 180px;
+}
+
+.action-clear {
+  flex: 0 0 auto;
+  width: auto;
+  border: 0;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.action-clear:hover {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--danger);
+  color: var(--danger);
+  filter: none;
 }
 
 .resultado {
@@ -1346,21 +1547,6 @@ button:focus-visible {
 .button-muted:hover {
   box-shadow: inset 0 0 0 1px var(--primary);
   color: var(--primary);
-  filter: none;
-}
-
-/* Ação destrutiva com a cor de ação destrutiva. Antes #resetar e .btn-del
-   estavam agrupados com .button-muted em #666 — a mesma severidade com duas
-   cores opostas, já que o × da sidebar era vermelho. */
-.button-danger {
-  background: transparent;
-  color: var(--danger);
-  box-shadow: inset 0 0 0 1px var(--danger);
-}
-
-.button-danger:hover {
-  background: var(--danger);
-  color: #fff;
   filter: none;
 }
 
@@ -2234,7 +2420,7 @@ button:focus-visible {
   }
 
   .app-view {
-    padding: 20px 14px calc(var(--tab-h) + 20px);
+    padding: 20px 14px calc(var(--gaveta-h, var(--tab-h)) + 20px);
   }
 
   .rail-btn {
@@ -2376,4 +2562,33 @@ button:focus-visible {
     padding-left: 16px;
     padding-right: 16px;
   }
+}
+
+/* A oferta de registrar, que o APP faz depois que ela calcula. Fica dentro da
+   bolha dela, mas com cara de acao e nao de fala, para o chefe nao confundir
+   texto do modelo com botao de verdade. */
+.lily-chat-oferta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.lily-chat-oferta span {
+  flex: 1 1 100%;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.lily-chat-oferta button {
+  width: auto;
+  flex: 0 0 auto;
+  padding: 8px 14px;
+  font-size: 0.78rem;
 }

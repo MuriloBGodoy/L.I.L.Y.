@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 
 import edge_tts
 
-from lily_bridge import VOICE, ask_lily
+from lily_bridge import VOICE, ask_lily, extrair_acao
 
 
 HOST = os.getenv("LILY_WEB_HOST", "127.0.0.1")
@@ -43,14 +43,23 @@ class LilyWebHandler(BaseHTTPRequestHandler):
             payload = self.read_json()
             message = str(payload.get("message") or payload.get("text") or "").strip()
             speak = bool(payload.get("speak", True))
+            contexto = payload.get("contexto")
 
             if not message:
                 self.send_json({"error": "Message is required"}, status=400)
                 return
 
-            reply = message if path == "/speak" else ask_lily(message)
+            acao = None
+            if path == "/speak":
+                reply = message
+            else:
+                # A acao sai do texto ANTES do TTS: senao a voz leria o
+                # bloco de comando em voz alta.
+                reply, acao = extrair_acao(ask_lily(message, contexto))
             audio = asyncio.run(synthesize_to_base64(reply)) if speak else ""
-            self.send_json({"reply": reply, "audio": audio, "voice": VOICE})
+            self.send_json(
+                {"reply": reply, "audio": audio, "voice": VOICE, "acao": acao}
+            )
         except Exception as error:
             self.send_json({"error": str(error)}, status=500)
 
