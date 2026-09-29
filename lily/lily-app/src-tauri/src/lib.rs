@@ -1,6 +1,7 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 use std::{
     fs::File,
+    io::Write,
     path::PathBuf,
     process::{Child, Command, Stdio},
     sync::Mutex,
@@ -86,13 +87,15 @@ fn stop_lily_voice(state: tauri::State<'_, LilyVoiceState>) -> Result<String, St
     Ok("stopped".to_string())
 }
 
-#[derive(serde::Deserialize)]
-struct LilyBridgeResponse {
-    reply: String,
-}
-
+// Payload vai por stdin: contexto + historico estouram o limite de linha de comando do Windows.
 #[tauri::command]
-fn ask_lily_chat(app: tauri::AppHandle, message: String, speak: bool) -> Result<String, String> {
+fn ask_lily_chat(
+    app: tauri::AppHandle,
+    message: String,
+    speak: bool,
+    contexto: Option<serde_json::Value>,
+    historico: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
     let engine_dir = find_engine_dir(&app)?;
     let python = find_python_executable(&engine_dir);
     let script = engine_dir.join("lily_bridge.py");
@@ -101,23 +104,37 @@ fn ask_lily_chat(app: tauri::AppHandle, message: String, speak: bool) -> Result<
         return Err("Nao encontrei engine/lily_bridge.py.".to_string());
     }
 
-    let mut command = Command::new(python);
-    command
-        .arg(script)
-        .arg("--message")
-        .arg(message)
-        .current_dir(engine_dir)
-        .stdin(Stdio::null())
-        .stderr(Stdio::piped())
-        .stdout(Stdio::piped());
+    let payload = serde_json::json!({
+        "message": message,
+        "speak": speak,
+        "contexto": contexto,
+        "historico": historico,
+    });
 
-    if speak {
-        command.arg("--speak");
+    let mut child = Command::new(python)
+        .arg(script)
+        .arg("--stdin")
+        .current_dir(engine_dir)
+        .stdin(Stdio::piped())
+        .stderr(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .map_err(|error| format!("Falha ao chamar a ponte Python: {error}"))?;
+
+    {
+        // O take() e o fim do bloco fecham o stdin; sem isso o Python fica preso no read().
+        let mut stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| "Nao consegui falar com a ponte Python.".to_string())?;
+        stdin
+            .write_all(payload.to_string().as_bytes())
+            .map_err(|error| format!("Falha ao enviar a pergunta: {error}"))?;
     }
 
-    let output = command
-        .output()
-        .map_err(|error| format!("Falha ao chamar a ponte Python: {error}"))?;
+    let output = child
+        .wait_with_output()
+        .map_err(|error| format!("Falha ao ler a resposta da ponte: {error}"))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -125,9 +142,14 @@ fn ask_lily_chat(app: tauri::AppHandle, message: String, speak: bool) -> Result<
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let parsed: LilyBridgeResponse = serde_json::from_str(stdout.trim())
+    let parsed: serde_json::Value = serde_json::from_str(stdout.trim())
         .map_err(|error| format!("Resposta invalida da Lily: {error}"))?;
-    Ok(parsed.reply)
+
+    if !parsed.get("reply").map(|r| r.is_string()).unwrap_or(false) {
+        return Err("A ponte respondeu sem a fala da Lily.".to_string());
+    }
+
+    Ok(parsed)
 }
 
 fn find_engine_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -152,8 +174,7 @@ fn find_python_executable(engine_dir: &PathBuf) -> PathBuf {
         return PathBuf::from(custom_python);
     }
 
-    // The checked-in venv can become stale when Python is moved/reinstalled.
-    // Prefer the current PATH Python; it is the one we install/test dependencies with.
+    // O venv versionado quebra quando o Python e reinstalado; prefere o do PATH.
     if which_python_is_available() {
         return PathBuf::from("python");
     }

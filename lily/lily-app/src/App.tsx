@@ -13,6 +13,7 @@ import {
   onAuthStateChanged,
   reauthenticateWithCredential,
   sendEmailVerification,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signOut,
   updateEmail,
@@ -37,7 +38,33 @@ import {
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { auth, db, isFirebaseConfigured, storage } from "./lib/firebase";
 
-type View = "home" | "settings" | "accounts";
+type View = "home" | "settings" | "accounts" | "hourly" | "pieces" | "clients";
+type SettingsPage = "hourly" | "pieces" | "clients";
+const SETTINGS_PAGES: View[] = ["settings", "hourly", "pieces", "clients"];
+const TELA_DA_VIEW: Record<View, string> = {
+  home: "inicio",
+  accounts: "contas",
+  settings: "ajustes",
+  hourly: "valorHora",
+  pieces: "pecas",
+  clients: "clientes",
+};
+const ROTAS: Record<View, string> = {
+  home: "/",
+  accounts: "/contas",
+  settings: "/ajustes",
+  hourly: "/ajustes/valor-hora",
+  pieces: "/ajustes/tipos-de-peca",
+  clients: "/ajustes/clientes",
+};
+
+function viewDaUrl(pathname: string): View | null {
+  const caminho = pathname.replace(/\/+$/, "") || "/";
+  const achada = (Object.keys(ROTAS) as View[]).find(
+    (view) => ROTAS[view] === caminho,
+  );
+  return achada ?? null;
+}
 type AccountType = "PF" | "PJ";
 type ClientType = "PF" | "PJ";
 type OwnerType = "estoque" | "cliente";
@@ -49,19 +76,33 @@ type LilyChatMessage = {
   id: number;
   author: "user" | "lily";
   text: string;
-  /* Depois de um calculo, o APP oferece registrar a conta. Quem oferece e
-     o app e nao o modelo, porque o modelo nao tem memoria da conversa e
-     nao saberia o que significa um "sim" na mensagem seguinte. */
   oferta?: "salvar";
 };
 
-/* O que a L.I.L.Y. pode pedir ao app. A engine ja validou antes de mandar;
-   aqui a gente confere de novo, porque confiar em uma validacao so, do
-   outro lado da rede, e confiar demais. */
 type LilyAcao = {
-  tipo: "calcular" | "salvar" | "modo";
+  tipo: "calcular" | "salvar" | "modo" | "navegar" | "conta";
   modo?: "padrao" | "avancado";
-  campos?: Partial<Record<keyof MainInputs, number>>;
+  destino?: LilyDestino;
+  campos?:
+    | Partial<Record<keyof MainInputs, number>>
+    | Partial<LilyCamposDaConta>;
+};
+type LilyDestino =
+  | "inicio"
+  | "calculadora"
+  | "contas"
+  | "ajustes"
+  | "valorHora"
+  | "pecas"
+  | "clientes";
+type LilyCamposDaConta = {
+  marca: string;
+  veiculo: string;
+  peca: string;
+  cliente: string;
+  proprietario: OwnerType;
+  vendidoPor: number;
+  maoDeObra: number;
 };
 type LilyWebResponse = {
   reply?: string;
@@ -107,6 +148,19 @@ type Client = {
   email: string;
   endereco: string;
   ie?: string;
+};
+
+const emptyClientForm = {
+  nome: "",
+  apelido: "",
+  cpf: "",
+  razaoSocial: "",
+  nomeFantasia: "",
+  cnpj: "",
+  inscEstadual: "",
+  tel: "",
+  email: "",
+  endereco: "",
 };
 
 type Config = {
@@ -248,6 +302,8 @@ const defaultAccountForm: AccountForm = {
   maoDeObraInput: "",
 };
 
+const LILY_HISTORICO_MAX = 8;
+
 const defaultMainInputs: MainInputs = {
   vInicial: "",
   frete: "",
@@ -284,8 +340,6 @@ const defaultProfileForm: ProfileForm = {
 const lilyWebServerUrl =
   import.meta.env.VITE_LILY_WEB_SERVER_URL ?? "http://127.0.0.1:8765";
 
-/* Recebe o texto ja traduzido: a mensagem de boas-vindas e a primeira coisa
-   que ele le, e antes estava cravada em portugues. */
 function createWelcomeMessages(text: string): LilyChatMessage[] {
   return [{ id: 1, author: "lily", text }];
 }
@@ -293,7 +347,6 @@ function createWelcomeMessages(text: string): LilyChatMessage[] {
 const translations = {
   "pt-BR": {
     appSubtitle: "From Santa Rita Radiadores",
-    // ---- reestrutura 2026-08-31: trilho, gaveta e secoes
     navCore: "Núcleo",
     navCalc: "Calculadora",
     navAccounts: "Contas",
@@ -427,7 +480,6 @@ const translations = {
     lilyCoreLabel: "Núcleo neural",
     lilyCoreHint: "Clique no núcleo para escolher voz ou mensagem.",
     lilyChooseMode: "Escolha como conversar",
-    // Bloco do núcleo: saudação, pergunta e os quatro atalhos.
     coreGreetMorning: "Bom dia",
     coreGreetAfternoon: "Boa tarde",
     coreGreetEvening: "Boa noite",
@@ -446,6 +498,10 @@ const translations = {
     lilyOfferNo: "Agora não",
     engineOffline:
       "A engine de IA não respondeu. Respondendo pelo modo local, mais limitado.",
+    lilyPecaNaoEncontrada:
+      "Não achei esse tipo de peça no cadastro. Escolha na lista ou cadastre em Ajustes.",
+    lilyClienteNaoEncontrado:
+      "Não achei esse cliente no cadastro. Escolha na lista ou cadastre em Ajustes.",
     verifyEmailSent:
       "Cadastro criado. Enviamos um e-mail de confirmação antes de liberar o acesso.",
     verifyEmailRequired:
@@ -471,6 +527,13 @@ const translations = {
     password: "Senha",
     loginSubmit: "Entrar",
     noAccount: "Não tem conta?",
+    forgotPassword: "Esqueci minha senha",
+    forgotPasswordNeedEmail: "Digite seu e-mail no campo acima para receber o link de redefinição.",
+    forgotPasswordSent:
+      "Se existir uma conta com esse e-mail, enviamos um link para redefinir a senha. Confira também o spam.",
+    forgotPasswordInvalidEmail: "Esse e-mail não parece válido. Confira e tente de novo.",
+    forgotPasswordError: "Não foi possível enviar o link agora. Tente novamente em instantes.",
+    forgotPasswordOffline: "A redefinição de senha precisa do Firebase configurado.",
     createRegistration: "Criar cadastro",
     loginEmailPlaceholder: "seuemail@empresa.com",
     passwordPlaceholder: "Digite sua senha",
@@ -600,10 +663,56 @@ const translations = {
     accountDataSection: "Dados da conta",
     accountOwnerSection: "Proprietário",
     accountValuesSection: "Valores",
+    perHourSuffix: "/h",
+    pieceTypeOne: "tipo cadastrado",
+    pieceTypeMany: "tipos cadastrados",
+    clientOne: "cliente",
+    clientMany: "clientes",
+    accountOne: "conta",
+    accountMany: "contas",
+    ofTotal: "de",
+    hourlyPageIntro:
+      "Quanto vale uma hora de trabalho. Entra no custo da mão de obra do cálculo avançado.",
+    hourlyCurrent: "Valor salvo",
+    discardChanges: "Descartar",
+    hourlyExampleKicker: "Como entra na conta",
+    hourlyExampleText:
+      "No modo avançado, as horas informadas são multiplicadas por este valor. Um serviço de 8 horas fica assim:",
+    alertHourlyInvalid: "Informe um valor por hora maior que zero.",
+    alertHourlySaved: "Valor da hora atualizado.",
+    piecesPageIntro: "aparecem na hora de registrar uma conta.",
+    newPiece: "+ Novo tipo",
+    newPieceTitle: "Novo tipo de peça",
+    editPiece: "Editar tipo de peça",
+    piecePlaceholder: "Ex.: Radiador",
+    pieceRenameHint:
+      "Contas já registradas continuam com o nome antigo; só os próximos registros usam o novo.",
+    searchPiece: "Buscar tipo de peça...",
+    sortBy: "Ordenar por",
+    sortName: "Nome (A–Z)",
+    sortUsage: "Mais usados",
+    sortRecent: "Mais recentes",
+    colPiece: "Tipo de peça",
+    colAccounts: "Contas",
+    emptyPiecesTitle: "Nenhum tipo de peça cadastrado",
+    emptyPiecesHint: "Cadastre os tipos que você mais atende, como Radiador e Intercooler.",
+    alertPieceRequired: "Informe o nome do tipo de peça.",
+    alertPieceDuplicate: "Já existe um tipo de peça com esse nome.",
+    alertPieceSaved: "Tipo de peça cadastrado.",
+    alertPieceUpdated: "Tipo de peça atualizado.",
+    alertRemovePiece: "Deseja remover este tipo de peça?",
+    clientsPageIntro: "pessoas e empresas que você vincula nas contas.",
+    newClient: "+ Novo cliente",
+    editClient: "Editar cliente",
+    searchClient: "Nome, apelido, CPF/CNPJ, telefone...",
+    filterAll: "Todos",
+    emptyClientsTitle: "Nenhum cliente cadastrado",
+    emptyClientsHint: "Cadastre pessoa física ou jurídica para vincular nas contas.",
+    alertClientSaved: "Cliente cadastrado.",
+    alertClientUpdated: "Cliente atualizado.",
   },
   "en-US": {
     appSubtitle: "From Santa Rita Radiadores",
-    // ---- restructure 2026-08-31: rail, drawer and sections
     navCore: "Core",
     navCalc: "Calculator",
     navAccounts: "Accounts",
@@ -752,6 +861,10 @@ const translations = {
     lilyOfferNo: "Not now",
     engineOffline:
       "The AI engine did not answer. Falling back to the limited local mode.",
+    lilyPecaNaoEncontrada:
+      "I could not find that part type. Pick it from the list or add it in Settings.",
+    lilyClienteNaoEncontrado:
+      "I could not find that client. Pick it from the list or add it in Settings.",
     verifyEmailSent:
       "Registration created. We sent a confirmation email before enabling access.",
     verifyEmailRequired:
@@ -777,6 +890,13 @@ const translations = {
     password: "Password",
     loginSubmit: "Sign in",
     noAccount: "No account?",
+    forgotPassword: "Forgot my password",
+    forgotPasswordNeedEmail: "Type your e-mail in the field above to receive the reset link.",
+    forgotPasswordSent:
+      "If an account exists for that e-mail, we sent a link to reset the password. Check your spam folder too.",
+    forgotPasswordInvalidEmail: "That e-mail doesn't look valid. Check it and try again.",
+    forgotPasswordError: "We couldn't send the link right now. Try again in a moment.",
+    forgotPasswordOffline: "Password reset requires Firebase to be configured.",
     createRegistration: "Create registration",
     loginEmailPlaceholder: "you@company.com",
     passwordPlaceholder: "Enter your password",
@@ -906,6 +1026,53 @@ const translations = {
     accountDataSection: "Account data",
     accountOwnerSection: "Owner",
     accountValuesSection: "Values",
+    perHourSuffix: "/h",
+    pieceTypeOne: "type registered",
+    pieceTypeMany: "types registered",
+    clientOne: "client",
+    clientMany: "clients",
+    accountOne: "account",
+    accountMany: "accounts",
+    ofTotal: "of",
+    hourlyPageIntro:
+      "What one hour of work is worth. It feeds labor cost in the advanced calculation.",
+    hourlyCurrent: "Saved value",
+    discardChanges: "Discard",
+    hourlyExampleKicker: "How it is used",
+    hourlyExampleText:
+      "In advanced mode, the hours entered are multiplied by this value. An 8-hour job looks like this:",
+    alertHourlyInvalid: "Enter an hourly value greater than zero.",
+    alertHourlySaved: "Hourly value updated.",
+    piecesPageIntro: "shown when you save an account.",
+    newPiece: "+ New type",
+    newPieceTitle: "New part type",
+    editPiece: "Edit part type",
+    piecePlaceholder: "e.g. Radiator",
+    pieceRenameHint:
+      "Accounts already saved keep the old name; only new records use the new one.",
+    searchPiece: "Search part type...",
+    sortBy: "Sort by",
+    sortName: "Name (A–Z)",
+    sortUsage: "Most used",
+    sortRecent: "Most recent",
+    colPiece: "Part type",
+    colAccounts: "Accounts",
+    emptyPiecesTitle: "No part types yet",
+    emptyPiecesHint: "Add the types you handle most, like Radiator and Intercooler.",
+    alertPieceRequired: "Enter the part type name.",
+    alertPieceDuplicate: "A part type with this name already exists.",
+    alertPieceSaved: "Part type added.",
+    alertPieceUpdated: "Part type updated.",
+    alertRemovePiece: "Remove this part type?",
+    clientsPageIntro: "people and companies you link to accounts.",
+    newClient: "+ New client",
+    editClient: "Edit client",
+    searchClient: "Name, nickname, tax ID, phone...",
+    filterAll: "All",
+    emptyClientsTitle: "No clients yet",
+    emptyClientsHint: "Add an individual or a company to link to your accounts.",
+    alertClientSaved: "Client added.",
+    alertClientUpdated: "Client updated.",
   },
 } satisfies Record<Locale, Record<string, string>>;
 
@@ -919,11 +1086,15 @@ function readStorage<T>(key: string, fallback: T): T {
   }
 }
 
-/* O usuário digita "1.234,56" e também "1.500" para mil e quinhentos. O
-   replace(",", ".") anterior trocava só a PRIMEIRA vírgula e deixava o ponto
-   de milhar passar pelo filtro: "1.000" virava Number("1.000") = 1, e
-   "1.234,56" virava "1.234.56" = NaN = 0. O app calculava e gravava o valor
-   errado sem nada na tela denunciar. */
+// Compara sem acento e sem caixa: "radiador" casa com "Radiador".
+function chaveDeBusca(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
 function toNumber(value: string): number {
   const limpo = value.replace(/[^\d.,-]/g, "");
   if (!limpo) return 0;
@@ -933,15 +1104,12 @@ function toNumber(value: string): number {
 
   const ultimaVirgula = corpo.lastIndexOf(",");
   if (ultimaVirgula >= 0) {
-    // Com vírgula presente, ela é o decimal e todo ponto é separador de milhar.
     corpo =
       corpo.slice(0, ultimaVirgula).replace(/[.,]/g, "") +
       "." +
       corpo.slice(ultimaVirgula + 1).replace(/[.,]/g, "");
   } else if (/^\d{1,3}(\.\d{3})+$/.test(corpo)) {
-    /* Sem vírgula, o ponto só vale como milhar quando o inteiro está agrupado
-       de três em três ("1.500", "1.234.567"). "1.5" e "1.50" continuam
-       valendo um e meio. */
+    // Sem virgula, ponto so e milhar quando agrupado de 3 em 3 ("1.500"). "1.5" continua 1,5.
     corpo = corpo.replace(/\./g, "");
   }
 
@@ -950,9 +1118,7 @@ function toNumber(value: string): number {
   return negativo ? -parsed : parsed;
 }
 
-/* A moeda continua sendo BRL em qualquer idioma: a oficina cobra em reais, e
-   trocar para USD em en-US mentiria sobre o valor. O que muda com o locale e
-   so a FORMATACAO do numero (R$ 3.316,49 vs R$3,316.49). */
+// Moeda sempre BRL; o locale so muda a formatacao do numero.
 function formatCurrency(value: number, locale: Locale = "pt-BR"): string {
   return value.toLocaleString(locale, {
     style: "currency",
@@ -1008,8 +1174,6 @@ function getPasswordStrength(pass: string) {
   if (/\d/.test(pass)) strength += 25;
   if (/[^a-zA-Z\d]/.test(pass)) strength += 25;
 
-  /* Devolve CHAVE, nao string: quem renderiza passa por t(). A cor vem de
-     token para nao brigar com o tema azul. */
   if (strength < 50) {
     return {
       labelKey: "passWeak" as const,
@@ -1095,9 +1259,6 @@ function calculateResults(inputs: MainInputs, isBlueMode: boolean, valorHora: nu
   };
 }
 
-/* Rotulo flutuante: continua legivel depois que o campo e preenchido, ao
-   contrario de um placeholder puro. Os campos do modal de conta e do cadastro
-   de cliente passaram a usar este mesmo componente pelo mesmo motivo. */
 function FloatingInput(props: {
   id: string;
   label: string;
@@ -1120,8 +1281,6 @@ function FloatingInput(props: {
   );
 }
 
-/* Todo <select> do app estava sem rotulo: a primeira <option> fazendo de
-   placeholder nao da nome acessivel ao controle. */
 function SelectField(props: {
   id: string;
   label: string;
@@ -1171,8 +1330,6 @@ function LabeledInput(props: {
   );
 }
 
-/* Botao do trilho. Icone sem texto precisa de nome acessivel e de estado
-   anunciado: o hamburguer antigo eram tres <span/> vazios, sem nada disso. */
 function RailButton(props: {
   label: string;
   active?: boolean;
@@ -1197,8 +1354,14 @@ function RailButton(props: {
   );
 }
 
-/* Um setor de anel (rosca) em coordenadas de SVG. Angulo 0 aponta para
-   cima e cresce no sentido horario, que e como a gente le uma roda. */
+function SettingsCrumb(props: { label: string; onBack: () => void }) {
+  return (
+    <button type="button" className="settings-crumb" onClick={props.onBack}>
+      <span aria-hidden="true">←</span> {props.label}
+    </button>
+  );
+}
+
 function setorAnular(
   raioInterno: number,
   raioExterno: number,
@@ -1223,8 +1386,6 @@ function setorAnular(
   ].join(" ");
 }
 
-/* As marquinhas do anel externo: uma por campo que o modo usa. Ver 3 de um
-   lado e 7 do outro conta a diferenca entre os modos sem escrever nada. */
 function marcasDoSetor(quantidade: number, grauInicio: number, grauFim: number) {
   const vao = (grauFim - grauInicio) / (quantidade + 1);
   return Array.from({ length: quantidade }, (_, indice) => {
@@ -1248,10 +1409,6 @@ function ResultRow(props: { label: string; value: string; strong?: boolean }) {
   );
 }
 
-/* UM dialogo para os seis modais do app. Antes nenhum deles tinha role,
-   aria-modal, foco inicial, foco preso nem fechar com Escape, e os × de
-   fechar ancoravam no canto da JANELA porque o cartao nao era position:
-   relative. */
 function Dialog(props: {
   title: string;
   kicker?: string;
@@ -1279,9 +1436,6 @@ function Dialog(props: {
       ).filter((element) => element.offsetParent !== null);
     }
 
-    /* Foco inicial no primeiro CAMPO, nao no × de fechar: abrir um dialogo
-       com o cursor no botao de fechar nao ajuda ninguem. Sem campo, cai no
-       primeiro focavel, e sem nada focavel, no proprio cartao. */
     const firstField = card?.querySelector<HTMLElement>(
       'input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled])',
     );
@@ -1296,7 +1450,6 @@ function Dialog(props: {
       }
       if (event.key !== "Tab") return;
 
-      // Prende o foco dentro do dialogo.
       const items = visibleFocusables();
       if (items.length === 0) return;
       const first = items[0];
@@ -1393,16 +1546,31 @@ function Toasts(props: { messages: ToastMessage[] }) {
 }
 
 function App() {
-  const [view, setView] = useState<View>("home");
+  const [view, setViewState] = useState<View>(
+    () => viewDaUrl(window.location.pathname) ?? "home",
+  );
+
+  function setView(next: View) {
+    if (window.location.pathname !== ROTAS[next]) {
+      window.history.pushState(null, "", ROTAS[next]);
+    }
+    setViewState(next);
+  }
+
+  useEffect(() => {
+    if (viewDaUrl(window.location.pathname) === null) {
+      window.history.replaceState(null, "", ROTAS.home);
+    }
+    const onPopState = () => {
+      setViewState(viewDaUrl(window.location.pathname) ?? "home");
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
   const [isBlueMode, setIsBlueMode] = useState(false);
   const [rodaAberta, setRodaAberta] = useState(false);
   const [modoEmFoco, setModoEmFoco] = useState(false);
-  /* A gaveta da calculadora. Fechada por padrao: a home abre no nucleo, e a
-     calculadora sobe quando ele pede (chip CALCULAR / botao do trilho) ou
-     quando ja existe conta selecionada. */
   const [drawerOpen, setDrawerOpen] = useState(false);
-  /* Login e cadastro nao tinham estado ocupado: dava para clicar cinco vezes
-     e disparar cinco cadastros. */
   const [authBusy, setAuthBusy] = useState(false);
   const [accountsLoading, setAccountsLoading] = useState(false);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
@@ -1449,7 +1617,6 @@ function App() {
   const browserRecognitionListeningRef = useRef(false);
   const browserIsSpeakingRef = useRef(false);
   const browserChatBusyRef = useRef(false);
-  // Avisa uma vez por sessao que a engine nao respondeu, em vez de a cada frase.
   const engineOfflineAvisadaRef = useRef(false);
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
@@ -1473,23 +1640,19 @@ function App() {
   const [accountImageFileName, setAccountImageFileName] = useState("");
   const [accountImageStatus, setAccountImageStatus] =
     useState<AccountImageStatus>("empty");
-  const [settingsModal, setSettingsModal] = useState<
-    null | "hora" | "pecas" | "clientes"
-  >(null);
+  const [hourlyDraft, setHourlyDraft] = useState("");
+  const [pieceModal, setPieceModal] = useState<null | "new" | number>(null);
   const [newPiece, setNewPiece] = useState("");
+  const [piecesSearch, setPiecesSearch] = useState("");
+  const [piecesSort, setPiecesSort] = useState<"name" | "usage">("name");
+  const [clientModal, setClientModal] = useState<null | "new" | number>(null);
+  const [clientsSearch, setClientsSearch] = useState("");
+  const [clientsTypeFilter, setClientsTypeFilter] = useState<"" | ClientType>("");
+  const [clientsSort, setClientsSort] = useState<"name" | "recent" | "usage">(
+    "name",
+  );
   const [clientType, setClientType] = useState<ClientType>("PF");
-  const [clientForm, setClientForm] = useState({
-    nome: "",
-    apelido: "",
-    cpf: "",
-    razaoSocial: "",
-    nomeFantasia: "",
-    cnpj: "",
-    inscEstadual: "",
-    tel: "",
-    email: "",
-    endereco: "",
-  });
+  const [clientForm, setClientForm] = useState(emptyClientForm);
   const [accountsSearch, setAccountsSearch] = useState("");
   const [accountsBrandFilter, setAccountsBrandFilter] = useState("");
 
@@ -1534,14 +1697,12 @@ function App() {
     stopping: t("lilyVoiceStopping"),
     error: t("lilyVoiceError"),
   }[lilyVoiceStatus];
-  /** Saudação por faixa do dia. Só o rótulo; o nome entra depois. */
   const greetingKey = (() => {
     const hour = new Date().getHours();
     if (hour < 12) return "coreGreetMorning" as const;
     if (hour < 18) return "coreGreetAfternoon" as const;
     return "coreGreetEvening" as const;
   })();
-  /** Primeiro nome. Se o login for só e-mail, corta no @ em vez de gritar. */
   const firstName = (displayName.includes("@")
     ? displayName.split("@")[0]
     : displayName
@@ -1566,24 +1727,15 @@ function App() {
     done: t("accountImageDone"),
   }[accountImageStatus];
 
-  /* O <html lang> estava fixo em pt-BR no index.html: leitor de tela lia o
-     ingles com fonemas portugueses. */
   useEffect(() => {
     document.documentElement.lang = locale;
   }, [locale]);
 
-  /* O log do chat nunca rolava sozinho: passadas algumas mensagens, a
-     resposta da Lily nascia fora da vista. */
   useEffect(() => {
     const log = chatLogRef.current;
     if (log) log.scrollTop = log.scrollHeight;
   }, [lilyChatMessages, lilyChatBusy, lilyAssistantMode, lilyAssistantOpen]);
 
-  /* A gaveta e fixa no rodape e cobre o fim da pagina. O CSS sozinho nao
-     sabe a altura dela, que muda com o modo e com o resultado, entao a
-     gente mede e escreve numa variavel que o padding do conteudo usa.
-     Sem isso, com a gaveta aberta os botoes de registrar nasciam atras
-     dela e nao dava para clicar. */
   useEffect(() => {
     const gaveta = gavetaRef.current;
     if (!gaveta) return;
@@ -1606,11 +1758,6 @@ function App() {
     };
   }, [view, drawerOpen]);
 
-  /* Quando ela calcula pelo chat, a oferta de registrar nasce atras da
-     gaveta. O scrollIntoView nao resolve: para o navegador o elemento ja
-     esta dentro da janela, ele nao sabe que tem uma gaveta fixa por cima.
-     Entao a gente mede a sobra ate o topo da gaveta e rola exatamente
-     isso. */
   useEffect(() => {
     const oferta = ofertaRef.current;
     if (!oferta) return;
@@ -1631,7 +1778,6 @@ function App() {
     return () => window.clearTimeout(id);
   }, [lilyChatMessages]);
 
-  /* O menu do usuario so fechava clicando de novo no gatilho. */
   useEffect(() => {
     if (!userMenuOpen) return;
 
@@ -1829,8 +1975,6 @@ function App() {
 
     if (!currentUser) return;
 
-    // A lista de contas nao tinha estado de carregando: a tela mostrava
-    // "nenhum registro" enquanto o Firestore ainda estava respondendo.
     setAccountsLoading(true);
     try {
       const accountsQuery = query(
@@ -1848,10 +1992,6 @@ function App() {
         ),
       );
     } catch (error) {
-      /* Sem este catch a rejeição subia solta: a lista ficava vazia e parecia
-         que os dados tinham sumido. A consulta combina where com orderBy, que
-         exige índice composto no Firestore — é justamente a falha mais
-         provável aqui, e ela precisa aparecer na tela. */
       const detalhe = error instanceof Error ? error.message : String(error);
       notify(`${t("accountsLoadError")}: ${detalhe}`, "error");
     } finally {
@@ -1997,12 +2137,94 @@ function App() {
     await handleLilyIncomingMessage(message, lilyVoiceStatus === "active");
   }
 
-  /* Roda o que a L.I.L.Y. pediu. Devolve o resultado quando ela calculou,
-     para o chat saber se cabe oferecer o registro logo em seguida.
+  function irPara(destino?: LilyDestino) {
+    if (!destino) return;
 
-     Tudo que ela faz aqui e visivel e desfazivel: os campos se preenchem
-     na frente do chefe e o LIMPAR volta atras. O que ela NAO faz e
-     gravar: "salvar" so abre o formulario, e quem confirma e ele. */
+    setAccountModalOpen(false);
+    setPieceModal(null);
+    setClientModal(null);
+
+    if (destino === "inicio") {
+      setView("home");
+      setDrawerOpen(false);
+      return;
+    }
+    if (destino === "calculadora") {
+      setView("home");
+      setDrawerOpen(true);
+      return;
+    }
+    if (destino === "contas") {
+      setView("accounts");
+      return;
+    }
+    if (destino === "ajustes") {
+      setView("settings");
+      return;
+    }
+
+    openSettingsPage(
+      destino === "valorHora" ? "hourly" : destino === "pecas" ? "pieces" : "clients",
+    );
+  }
+
+  function preencherFormularioDaConta(campos: Partial<LilyCamposDaConta>) {
+    if (!campos || typeof campos !== "object") return;
+
+    setAccountModalOpen(true);
+
+    const mudancas: Partial<AccountForm> = {};
+
+    if (typeof campos.marca === "string" && campos.marca.trim()) {
+      mudancas.marca = campos.marca.trim();
+    }
+    if (typeof campos.veiculo === "string" && campos.veiculo.trim()) {
+      mudancas.veiculo = campos.veiculo.trim();
+    }
+
+    if (typeof campos.peca === "string" && campos.peca.trim()) {
+      const alvo = chaveDeBusca(campos.peca);
+      const encontrada = config.pecas.find(
+        (peca) => chaveDeBusca(peca) === alvo,
+      );
+      if (encontrada) mudancas.tipoPeca = encontrada;
+      else notify(t("lilyPecaNaoEncontrada"), "info");
+    }
+
+    if (campos.proprietario === "estoque") {
+      mudancas.tipoProprietario = "estoque";
+      mudancas.clienteSelect = "";
+      mudancas.clienteTelefone = "";
+    } else if (campos.proprietario === "cliente") {
+      mudancas.tipoProprietario = "cliente";
+    }
+
+    if (typeof campos.cliente === "string" && campos.cliente.trim()) {
+      const alvo = chaveDeBusca(campos.cliente);
+      const encontrado = config.clientes.find((cliente) =>
+        [cliente.nome, cliente.apelido, cliente.fantasia].some(
+          (nome) => nome && chaveDeBusca(nome) === alvo,
+        ),
+      );
+      if (encontrado) {
+        mudancas.tipoProprietario = "cliente";
+        mudancas.clienteSelect = String(encontrado.id);
+      } else {
+        notify(t("lilyClienteNaoEncontrado"), "info");
+      }
+    }
+
+    if (typeof campos.vendidoPor === "number" && Number.isFinite(campos.vendidoPor)) {
+      mudancas.vendidoPorInput = String(campos.vendidoPor);
+    }
+    if (typeof campos.maoDeObra === "number" && Number.isFinite(campos.maoDeObra)) {
+      mudancas.maoDeObraInput = String(campos.maoDeObra);
+    }
+
+    if (!Object.keys(mudancas).length) return;
+    setAccountForm((prev) => ({ ...prev, ...mudancas }));
+  }
+
   function executarAcaoDaLily(acao: LilyAcao): Results | null {
     if (acao.tipo === "modo") {
       if (!acao.modo) return null;
@@ -2015,13 +2237,19 @@ function App() {
       return null;
     }
 
+    if (acao.tipo === "navegar") {
+      irPara(acao.destino);
+      return null;
+    }
+
+    if (acao.tipo === "conta") {
+      preencherFormularioDaConta(acao.campos as Partial<LilyCamposDaConta>);
+      return null;
+    }
+
     if (!acao.campos) return null;
 
     const avancado = acao.modo ? acao.modo === "avancado" : isBlueMode;
-    /* Monto o objeto aqui e calculo em cima dele em vez de ler o estado
-       depois: setState e assincrono, e calcular lendo mainInputs usaria os
-       valores velhos. O numero continua saindo do calculateResults; ela so
-       trouxe os valores. */
     const novos: MainInputs = { ...mainInputs };
     let mexeu = false;
     for (const [chave, valor] of Object.entries(acao.campos)) {
@@ -2063,22 +2291,17 @@ function App() {
     setLilyChatBusy(true);
 
     try {
-      const webReply = isTauriRuntime
-        ? null
+      const resposta = isTauriRuntime
+        ? await askLilyDesktop(message, shouldSpeak)
         : await askLilyWeb(message, shouldSpeak);
-      /* Quando a engine nao responde o codigo cai num bot de if/else que
-         devolve uma frase plausivel. Sem este aviso o usuario acha que a
-         L.I.L.Y ficou burra, em vez de saber que a engine nao subiu. */
-      if (!isTauriRuntime && !webReply && !engineOfflineAvisadaRef.current) {
+      if (!resposta && !engineOfflineAvisadaRef.current) {
         engineOfflineAvisadaRef.current = true;
         notify(t("engineOffline"), "info");
       }
 
-      const reply = isTauriRuntime
-        ? await invoke<string>("ask_lily_chat", { message, speak: shouldSpeak })
-        : webReply?.reply || createLocalLilyReply(message);
+      const reply = resposta?.reply || createLocalLilyReply(message);
 
-      const acao = isTauriRuntime ? null : webReply?.acao ?? null;
+      const acao = resposta?.acao ?? null;
       const calculado = acao ? executarAcaoDaLily(acao) : null;
 
       setLilyChatMessages((prev) => [
@@ -2091,8 +2314,8 @@ function App() {
         },
       ]);
       if (shouldSpeak && !isTauriRuntime) {
-        if (webReply?.audio) {
-          playLilyWebAudio(webReply.audio);
+        if (resposta?.audio) {
+          playLilyWebAudio(resposta.audio);
         } else {
           void speakWithPreferredWebVoice(reply || createLocalLilyReply(message));
         }
@@ -2111,13 +2334,6 @@ function App() {
     }
   }
 
-  /* O que vai junto da pergunta para a L.I.L.Y. enxergar a tela. Vao os
-     numeros do servico e a identificacao do veiculo. NAO vai nome de
-     cliente: e dado de terceiro, sai da maquina do chefe rumo a Groq e
-     ao Gemini, e nao ajuda em nada a responder sobre calculo.
-
-     Os valores seguem ja formatados pelo locale da tela, para ela nunca
-     citar um numero escrito diferente do que esta aparecendo. */
   function montarContextoDaLily() {
     const campos: Record<string, string> = {};
     const emDinheiro: Array<[keyof MainInputs, string]> = [
@@ -2131,7 +2347,6 @@ function App() {
       const valor = toNumber(mainInputs[chave]);
       if (valor) campos[rotulo] = formatCurrency(valor, locale);
     }
-    // Horas e quantidade, nao dinheiro: mandar com R$ seria mentira.
     const horas = toNumber(mainInputs.horas);
     if (horas) campos["horas de servico"] = String(horas);
 
@@ -2151,7 +2366,27 @@ function App() {
       }
     }
 
+    const janela = accountModalOpen
+      ? "salvarConta"
+      : pieceModal !== null
+        ? "peca"
+        : clientModal !== null
+          ? "cliente"
+          : profileModalOpen
+            ? "perfil"
+            : termsOpen
+              ? "termos"
+              : null;
+
     return {
+      tela: TELA_DA_VIEW[view],
+      gaveta: drawerOpen,
+      janela,
+      formularioDaConta: accountModalOpen
+        ? montarFormularioDaContaParaLily()
+        : null,
+      pecasCadastradas: config.pecas,
+      clientesCadastrados: config.clientes.length,
       modo: isBlueMode ? "avancado" : "padrao",
       valorHora: formatCurrency(config.valorHora || 40, locale),
       campos,
@@ -2168,6 +2403,65 @@ function App() {
     };
   }
 
+  function montarFormularioDaContaParaLily() {
+    const preenchidos: Record<string, string> = {};
+    const vazios: string[] = [];
+
+    const texto: Array<[string, string]> = [
+      ["marca", accountForm.marca],
+      ["veiculo", accountForm.veiculo],
+      ["tipo de peca", accountForm.tipoPeca],
+    ];
+    for (const [rotulo, valor] of texto) {
+      if (valor.trim()) preenchidos[rotulo] = valor.trim();
+      else vazios.push(rotulo);
+    }
+
+    const dinheiro: Array<[string, string]> = [
+      ["vendido por", accountForm.vendidoPorInput],
+      ["mao de obra", accountForm.maoDeObraInput],
+    ];
+    for (const [rotulo, valor] of dinheiro) {
+      const numero = toNumber(valor);
+      if (numero) preenchidos[rotulo] = formatCurrency(numero, locale);
+      else vazios.push(rotulo);
+    }
+
+    if (accountForm.tipoProprietario === "cliente") {
+      preenchidos["dono"] = "de um cliente";
+      if (accountForm.clienteSelect) preenchidos["cliente"] = "ja escolhido";
+      else vazios.push("qual cliente");
+    } else {
+      preenchidos["dono"] = "estoque";
+    }
+
+    return { preenchidos, vazios };
+  }
+
+  function montarHistoricoDaLily() {
+    return lilyChatMessages
+      .slice(-LILY_HISTORICO_MAX)
+      .map((mensagem) => ({
+        autor: mensagem.author,
+        texto: mensagem.text,
+      }));
+  }
+
+  async function askLilyDesktop(message: string, speak: boolean) {
+    try {
+      const resposta = await invoke<LilyWebResponse>("ask_lily_chat", {
+        message,
+        speak,
+        contexto: montarContextoDaLily(),
+        historico: montarHistoricoDaLily(),
+      });
+      if (!resposta || resposta.error) return null;
+      return resposta;
+    } catch {
+      return null;
+    }
+  }
+
   async function askLilyWeb(message: string, speak: boolean) {
     try {
       const response = await fetch(`${lilyWebServerUrl}/chat`, {
@@ -2177,9 +2471,9 @@ function App() {
           message,
           speak,
           contexto: montarContextoDaLily(),
+          historico: montarHistoricoDaLily(),
         }),
-        // Sem timeout, uma porta filtrada deixava o fetch pendurado para
-        // sempre: lilyChatBusy nunca voltava e o botao Enviar morria.
+        // Sem timeout, uma porta filtrada deixa o fetch pendurado e o chat trava.
         signal: AbortSignal.timeout(8000),
       });
       if (!response.ok) return null;
@@ -2207,7 +2501,6 @@ function App() {
         }
       }
     } catch {
-      // Fallback below keeps browser-only voice usable if the local server is off.
     }
 
     speakWithBrowserVoice(text);
@@ -2306,14 +2599,6 @@ function App() {
 
   function createLocalLilyReply(message: string) {
     const normalized = message.toLowerCase();
-    /* Este e o texto que ele MAIS ve, porque e o fallback de quando a engine
-       esta desligada. Os gatilhos aceitam os termos nos dois idiomas.
-
-       MANUTENCAO: estas respostas citam botoes e telas pelo nome. Quando
-       renomear algo na interface, corrija aqui E no LILY_SYSTEM_PROMPT em
-       engine/lily_bridge.py — sao os dois lugares onde a L.I.L.Y. guarda o
-       que ela acha que sabe do app. Ja aconteceu de ela mandar clicar em
-       Cadastrar Conta depois que o botao virou Salvar Conta. */
     if (
       normalized.includes("calcular") ||
       normalized.includes("calculate") ||
@@ -2365,10 +2650,7 @@ function App() {
   }
 
   function normalizeImageToken(value: string) {
-    return value
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase();
+    return chaveDeBusca(value);
   }
 
   function applyAccountImageRecognition() {
@@ -2405,10 +2687,6 @@ function App() {
     notify(t("accountImageDone"), "success");
   }
 
-  /* O "limpar" da gaveta e o "começar um serviço novo" faziam a mesma
-     faxina por caminhos diferentes: handleReset zerava três coisas e
-     handleNewAccount zerava cinco. Agora a faxina é uma só e quem navega
-     é o chamador — o limpar da gaveta não te arranca da tela onde está. */
   function limparServico() {
     setSelectedAccountId(null);
     setMainInputs(defaultMainInputs);
@@ -2538,10 +2816,6 @@ function App() {
       return;
     }
 
-    /* O catch único de antes cobria o login E a leitura do Firestore, então
-       qualquer tropeço de índice, permissão ou rede era anunciado como
-       "Usuário ou senha incorretos" — o sujeito digitava a senha certa e era
-       acusado de errar. Agora são dois blocos com mensagens diferentes. */
     let credential;
     try {
       credential = await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
@@ -2585,15 +2859,11 @@ function App() {
       });
       await loadAccounts(credential.user);
     } catch (error) {
-      /* Falha aqui é de dados, não de senha: deixamos ele entrar com o que dá
-         para montar só pelo credential e dizemos a verdade sobre o resto. */
       const detalhe = error instanceof Error ? error.message : String(error);
       notify(`${t("loginDataError")}: ${detalhe}`, "error");
     }
   }
 
-  /* Guarda de reentrada: sem ela, cinco cliques no botao disparavam cinco
-     cadastros. O botao tambem fica disabled enquanto isto roda. */
   async function handleRegister() {
     if (authBusy) return;
     setAuthBusy(true);
@@ -2609,6 +2879,38 @@ function App() {
     setAuthBusy(true);
     try {
       await performLogin();
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  async function handleForgotPassword() {
+    if (authBusy) return;
+    if (!isFirebaseConfigured || !auth) {
+      notify(t("forgotPasswordOffline"), "error");
+      return;
+    }
+    const email = loginEmail.trim();
+    if (!email) {
+      notify(t("forgotPasswordNeedEmail"), "info");
+      return;
+    }
+    setAuthBusy(true);
+    try {
+      auth.languageCode = locale;
+      await sendPasswordResetEmail(auth, email);
+      notify(t("forgotPasswordSent"), "success");
+    } catch (error) {
+      const code = (error as { code?: string }).code;
+      // Conta inexistente recebe a mesma resposta de sucesso: a tela
+      // nao pode servir para descobrir quais e-mails tem cadastro.
+      if (code === "auth/user-not-found") {
+        notify(t("forgotPasswordSent"), "success");
+      } else if (code === "auth/invalid-email") {
+        notify(t("forgotPasswordInvalidEmail"), "error");
+      } else {
+        notify(t("forgotPasswordError"), "error");
+      }
     } finally {
       setAuthBusy(false);
     }
@@ -2648,10 +2950,6 @@ function App() {
   async function handleSaveProfile() {
     if (profileSaving) return;
 
-    /* Os catches de updateEmail/updatePassword faziam return de dentro do
-       try, pulando o setUserData la embaixo: nome, telefone, documento e
-       foto recem-editados iam para o lixo calados. Agora a falha de
-       credencial e sinalizada e o resto do perfil segue salvando. */
     let credencialFalhou = false;
 
     const nextUserData: UserData = {
@@ -2726,7 +3024,6 @@ function App() {
             try {
               await updateEmail(auth.currentUser, nextUserData.email);
             } catch {
-              // O e-mail antigo continua valendo: nao grave o novo no banco.
               nextUserData.email = userData?.email ?? user.email ?? nextUserData.email;
               notify(t("profileEmailAuthWarning"), "error");
               credencialFalhou = true;
@@ -2762,8 +3059,6 @@ function App() {
 
       setUserData(nextUserData);
       setProfilePhotoFile(null);
-      /* Com a credencial recusada o modal fica aberto para ele tentar de
-         novo, mas o que ja foi salvo esta salvo e os toasts explicam. */
       if (!credencialFalhou) {
         setProfileModalOpen(false);
         notify(t("profileSaved"), "success");
@@ -2798,8 +3093,6 @@ function App() {
     reader.readAsDataURL(file);
   }
 
-  /* Escolher uma conta carrega os valores dela e ja sobe a gaveta: era a
-     regra "aberta por padrao quando voce ja tem uma conta em andamento". */
   function handleSelectAccount(account: LilyAccount) {
     applyAccountToForm(account);
     setView("home");
@@ -2913,54 +3206,124 @@ function App() {
     notify(existingAccount ? t("alertAccountUpdated") : t("alertAccountSaved"), "success");
   }
 
-  function addPiece() {
+  function openSettingsPage(page: SettingsPage) {
+    setView(page);
+  }
+
+  useEffect(() => {
+    if (view === "hourly") setHourlyDraft(String(config.valorHora));
+  }, [view]);
+
+  const hourlyDraftValue = toNumber(hourlyDraft);
+  const hourlyDirty = hourlyDraftValue !== config.valorHora;
+
+  function saveHourly() {
+    if (hourlyDraftValue <= 0) {
+      notify(t("alertHourlyInvalid"), "error");
+      return;
+    }
+    setConfig((prev) => ({ ...prev, valorHora: hourlyDraftValue }));
+    setHourlyDraft(String(hourlyDraftValue));
+    notify(t("alertHourlySaved"), "success");
+  }
+
+  function openPieceModal(index: number | "new") {
+    setNewPiece(index === "new" ? "" : (config.pecas[index] ?? ""));
+    setPieceModal(index);
+  }
+
+  function savePiece() {
     const piece = newPiece.trim();
-    if (!piece) return;
-    setConfig((prev) => ({ ...prev, pecas: [...prev.pecas, piece] }));
+    if (!piece) {
+      notify(t("alertPieceRequired"), "error");
+      return;
+    }
+    const duplicada = config.pecas.some(
+      (item, index) =>
+        index !== pieceModal && chaveDeBusca(item) === chaveDeBusca(piece),
+    );
+    if (duplicada) {
+      notify(t("alertPieceDuplicate"), "error");
+      return;
+    }
+    setConfig((prev) => ({
+      ...prev,
+      pecas:
+        pieceModal === "new"
+          ? [...prev.pecas, piece]
+          : prev.pecas.map((item, index) => (index === pieceModal ? piece : item)),
+    }));
+    notify(pieceModal === "new" ? t("alertPieceSaved") : t("alertPieceUpdated"), "success");
+    setPieceModal(null);
     setNewPiece("");
   }
 
   function removePiece(index: number) {
+    if (!window.confirm(t("alertRemovePiece"))) return;
     setConfig((prev) => ({
       ...prev,
       pecas: prev.pecas.filter((_item, currentIndex) => currentIndex !== index),
     }));
   }
 
-  function addClient() {
+  function openClientModal(client: Client | "new") {
+    if (client === "new") {
+      setClientType("PF");
+      setClientForm(emptyClientForm);
+      setClientModal("new");
+      return;
+    }
+    const pf = client.tipo === "PF";
+    setClientType(client.tipo);
+    setClientForm({
+      nome: pf ? client.nome : "",
+      apelido: client.apelido ?? "",
+      cpf: pf ? client.doc : "",
+      razaoSocial: pf ? "" : client.nome,
+      nomeFantasia: client.fantasia ?? "",
+      cnpj: pf ? "" : client.doc,
+      inscEstadual: client.ie ?? "",
+      tel: client.tel,
+      email: client.email,
+      endereco: client.endereco,
+    });
+    setClientModal(client.id);
+  }
+
+  function saveClient() {
     const nome = clientType === "PF" ? clientForm.nome : clientForm.razaoSocial;
     const doc = clientType === "PF" ? clientForm.cpf : clientForm.cnpj;
-    if (!nome || !doc) {
+    if (!nome.trim() || !doc.trim()) {
       notify(t("alertClientRequired"), "error");
       return;
     }
 
     const client: Client = {
-      id: Date.now(),
+      id: clientModal === "new" || clientModal === null ? Date.now() : clientModal,
       tipo: clientType,
-      nome,
-      apelido: clientForm.apelido,
-      fantasia: clientForm.nomeFantasia,
+      nome: nome.trim(),
+      apelido: clientType === "PF" ? clientForm.apelido : "",
+      fantasia: clientType === "PJ" ? clientForm.nomeFantasia : "",
       doc,
       tel: clientForm.tel,
       email: clientForm.email,
       endereco: clientForm.endereco,
-      ie: clientForm.inscEstadual,
+      ie: clientType === "PJ" ? clientForm.inscEstadual : "",
     };
 
-    setConfig((prev) => ({ ...prev, clientes: [...prev.clientes, client] }));
-    setClientForm({
-      nome: "",
-      apelido: "",
-      cpf: "",
-      razaoSocial: "",
-      nomeFantasia: "",
-      cnpj: "",
-      inscEstadual: "",
-      tel: "",
-      email: "",
-      endereco: "",
-    });
+    setConfig((prev) => ({
+      ...prev,
+      clientes:
+        clientModal === "new"
+          ? [...prev.clientes, client]
+          : prev.clientes.map((item) => (item.id === client.id ? client : item)),
+    }));
+    notify(
+      clientModal === "new" ? t("alertClientSaved") : t("alertClientUpdated"),
+      "success",
+    );
+    setClientModal(null);
+    setClientForm(emptyClientForm);
   }
 
   function removeClient(id: number) {
@@ -2970,6 +3333,54 @@ function App() {
       clientes: prev.clientes.filter((client) => client.id !== id),
     }));
   }
+
+  // As contas guardam o NOME da peca/cliente, entao a contagem e por nome.
+  const usoPorPeca = new Map<string, number>();
+  const usoPorCliente = new Map<string, number>();
+  for (const account of accounts) {
+    const peca = chaveDeBusca(account.tipoPeca || "");
+    const cliente = chaveDeBusca(account.clienteNome || "");
+    if (peca) usoPorPeca.set(peca, (usoPorPeca.get(peca) ?? 0) + 1);
+    if (cliente) usoPorCliente.set(cliente, (usoPorCliente.get(cliente) ?? 0) + 1);
+  }
+  const usoDaPeca = (piece: string) => usoPorPeca.get(chaveDeBusca(piece)) ?? 0;
+  const usoDoCliente = (client: Client) =>
+    usoPorCliente.get(chaveDeBusca(client.nome)) ?? 0;
+
+  const piecesQuery = chaveDeBusca(piecesSearch);
+  const visiblePieces = config.pecas
+    .map((piece, index) => ({ piece, index, uso: usoDaPeca(piece) }))
+    .filter(({ piece }) => chaveDeBusca(piece).includes(piecesQuery))
+    .sort((a, b) =>
+      piecesSort === "usage"
+        ? b.uso - a.uso || a.piece.localeCompare(b.piece, locale)
+        : a.piece.localeCompare(b.piece, locale),
+    );
+
+  const clientsQuery = chaveDeBusca(clientsSearch);
+  const clientsQueryDigits = clientsSearch.replace(/\D/g, "");
+  const visibleClients = config.clientes
+    .filter((client) => {
+      if (clientsTypeFilter && client.tipo !== clientsTypeFilter) return false;
+      if (!clientsQuery) return true;
+      const texto = chaveDeBusca(
+        [client.nome, client.apelido, client.fantasia, client.email].join(" "),
+      );
+      // CPF, CNPJ e telefone comparam so os digitos.
+      const digitos = (client.doc + " " + client.tel).replace(/\D/g, "");
+      return (
+        texto.includes(clientsQuery) ||
+        (clientsQueryDigits.length >= 3 && digitos.includes(clientsQueryDigits))
+      );
+    })
+    .sort((a, b) =>
+      clientsSort === "recent"
+        ? b.id - a.id
+        : clientsSort === "usage"
+          ? usoDoCliente(b) - usoDoCliente(a) || a.nome.localeCompare(b.nome, locale)
+          : a.nome.localeCompare(b.nome, locale),
+    );
+  const clientsFiltering = !!clientsQuery || !!clientsTypeFilter;
 
   const modeAccounts = accounts.filter((account) => account.modo === isBlueMode);
 
@@ -2988,8 +3399,6 @@ function App() {
   const assistantConsoleOpen = lilyAssistantOpen && lilyAssistantMode !== null;
   const isFiltering = Boolean(accountsSearch || accountsBrandFilter);
 
-  /* O que a aba da gaveta mostra quando ela esta fechada: qual conta esta em
-     andamento e o lucro final, para nao precisar abrir so para conferir. */
   const drawerSummary = selectedAccount
     ? [
         selectedAccount.veiculo || t("noVehicle"),
@@ -3002,9 +3411,6 @@ function App() {
       ? `${t("finalProfitShort")} ${formatCurrency(results.lucro, locale)}`
       : t("drawerIdle");
 
-  /* O chip de continuar só existe quando há trabalho em andamento, e diz
-     O QUE vai continuar. Um botão genérico ali seria só mais uma cópia do
-     trilho, que é justamente o que estamos tirando da tela. */
   const trabalhoEmAndamento = Boolean(selectedAccount || results);
   const continueLabel = selectedAccount
     ? `${t("continueWork")}: ${selectedAccount.veiculo || t("noVehicle")}`
@@ -3028,8 +3434,6 @@ function App() {
     setRodaAberta(false);
   }
 
-  /* O setor da esquerda e o padrao, o da direita e o avancado. Os angulos
-     deixam uma fresta entre os dois, como na roda de acao que ele mandou. */
   const SETORES = [
     {
       avancado: false,
@@ -3078,9 +3482,6 @@ function App() {
           setoresRef.current[paraAvancado ? 1 : 0]?.focus();
         }}
       >
-        {/* O desenho e so pintura: quem responde a teclado e a leitor de
-            tela sao os dois botoes por cima. SVG interativo daria um
-            trabalho de acessibilidade que nao se paga aqui. */}
         <svg viewBox="0 0 400 400" aria-hidden="true">
           {SETORES.map((setor) => (
             <g
@@ -3154,9 +3555,6 @@ function App() {
     </Dialog>
   );
 
-  /* Era um par de botoes escrito AM e AZ — as duas primeiras letras de
-     AMARELA e AZUL, cortadas no codigo com slice(0, 2). Em ingles isso
-     virava YE e BL. Agora e um alvo redondo que abre a roda. */
   const railModeButtons = (
     <button
       type="button"
@@ -3178,8 +3576,6 @@ function App() {
   return (
     <div className={isBlueMode ? "app-shell azul" : "app-shell"}>
       {rodaDeModo}
-      {/* A pele de HUD que antes era o fundo do card do nucleo. Agora e a
-          tela inteira, bem mais fraca: o efeito fica, a caixa nao. */}
       <div className="app-bg" aria-hidden="true" />
       <Toasts messages={toasts} />
 
@@ -3243,6 +3639,14 @@ function App() {
                     value={loginPassword}
                     onChange={setLoginPassword}
                   />
+                  <button
+                    className="link-button auth-forgot"
+                    type="button"
+                    disabled={authBusy}
+                    onClick={() => void handleForgotPassword()}
+                  >
+                    {t("forgotPassword")}
+                  </button>
                   <button type="submit" disabled={authBusy}>
                     {authBusy ? t("loginBusy") : t("loginSubmit")}
                   </button>
@@ -3386,8 +3790,6 @@ function App() {
                     </div>
                   </div>
 
-                  {/* O link dos termos saiu de DENTRO do <label> do checkbox:
-                      clicar nele tambem marcava a caixa. */}
                   <label className="terms-row" htmlFor="register-terms">
                     <input
                       id="register-terms"
@@ -3433,7 +3835,6 @@ function App() {
         </div>
       ) : (
         <>
-          {/* ================================================ TRILHO ==== */}
           <nav className="app-rail" aria-label={t("navMain")}>
             <span className="rail-brand" aria-hidden="true">
               L
@@ -3479,7 +3880,7 @@ function App() {
 
             <RailButton
               label={t("navSettings")}
-              active={view === "settings"}
+              active={SETTINGS_PAGES.includes(view)}
               onClick={() => setView("settings")}
             >
               <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -3560,7 +3961,6 @@ function App() {
             </div>
           </nav>
 
-          {/* ================================================== TELAS ==== */}
           <main className="app-view">
             {view === "home" && (
               <section
@@ -3569,8 +3969,6 @@ function App() {
                 }
                 aria-label={t("lilyAssistantTitle")}
               >
-                {/* O NUCLEO. Solto sobre o fundo: sem card, sem borda, sem
-                    moldura. O desenho dele nao mudou uma linha. */}
                 <button
                   type="button"
                   className={lilyCoreStateClass}
@@ -3594,10 +3992,6 @@ function App() {
                 </p>
                 <h2 className="core-ask">{t("coreAsk")}</h2>
 
-                {/* Os chips repetiam o trilho: calcular, ver contas e falar
-                    por voz já tinham botão permanente na tela, e o de voz
-                    era código idêntico ao do card logo abaixo. Sobraram os
-                    dois atalhos que o trilho NÃO consegue dar. */}
                 <div className="core-chips">
                   <button
                     type="button"
@@ -3759,7 +4153,6 @@ function App() {
               </section>
             )}
 
-            {/* ================================ CONTAS: A CAIXA MORA AQUI */}
             {view === "accounts" && (
               <section className="section-box">
                 <div className="section-head">
@@ -3832,9 +4225,6 @@ function App() {
                     <h3>{t("loadingAccounts")}</h3>
                   </div>
                 ) : visibleAccounts.length === 0 ? (
-                  /* Dois estados vazios diferentes: nao ter conta nenhuma e o
-                     filtro nao achar nada sao problemas distintos e antes
-                     mostravam a mesma frase. */
                   <div className="empty-state">
                     <span className="empty-state-glyph" aria-hidden="true">
                       {isFiltering || modeAccounts.length > 0 ? "⌕" : "◎"}
@@ -3873,8 +4263,6 @@ function App() {
                             : "account-row"
                         }
                       >
-                        {/* Selecionar e apagar viraram IRMAOS: antes o botao
-                            de apagar ficava dentro da area clicavel. */}
                         <button
                           type="button"
                           className="account-row-main"
@@ -3924,7 +4312,6 @@ function App() {
               </section>
             )}
 
-            {/* ================================================= AJUSTES */}
             {view === "settings" && (
               <section className="section-box">
                 <div className="section-head">
@@ -3936,48 +4323,351 @@ function App() {
                 </div>
                 <div className="section-body">
                   <div className="grid-settings">
-                    {/* Eram <div onClick>: os unicos acessos a estes tres
-                        paineis, e nenhum alcancavel pelo teclado. */}
                     <button
                       type="button"
                       className="setting-card"
-                      onClick={() => setSettingsModal("hora")}
+                      onClick={() => openSettingsPage("hourly")}
                     >
                       <span className="setting-card-icon" aria-hidden="true">
                         ⏱
                       </span>
                       <h3>{t("hourlyValue")}</h3>
                       <p>{t("hourlyValueDesc")}</p>
+                      <span className="setting-card-stat">
+                        {formatCurrency(config.valorHora, locale)}
+                        {t("perHourSuffix")}
+                      </span>
                     </button>
                     <button
                       type="button"
                       className="setting-card"
-                      onClick={() => setSettingsModal("pecas")}
+                      onClick={() => openSettingsPage("pieces")}
                     >
                       <span className="setting-card-icon" aria-hidden="true">
                         📦
                       </span>
                       <h3>{t("pieceTypes")}</h3>
                       <p>{t("pieceTypesDesc")}</p>
+                      <span className="setting-card-stat">
+                        {config.pecas.length}{" "}
+                        {config.pecas.length === 1 ? t("pieceTypeOne") : t("pieceTypeMany")}
+                      </span>
                     </button>
                     <button
                       type="button"
                       className="setting-card"
-                      onClick={() => setSettingsModal("clientes")}
+                      onClick={() => openSettingsPage("clients")}
                     >
                       <span className="setting-card-icon" aria-hidden="true">
                         👤
                       </span>
                       <h3>{t("clients")}</h3>
                       <p>{t("clientsDesc")}</p>
+                      <span className="setting-card-stat">
+                        {config.clientes.length}{" "}
+                        {config.clientes.length === 1 ? t("clientOne") : t("clientMany")}
+                      </span>
                     </button>
                   </div>
                 </div>
               </section>
             )}
+
+            {view === "hourly" && (
+              <section className="section-box">
+                <div className="section-head">
+                  <div>
+                    <SettingsCrumb
+                      label={t("settings")}
+                      onBack={() => setView("settings")}
+                    />
+                    <h1>{t("hourlyValue")}</h1>
+                    <p>{t("hourlyPageIntro")}</p>
+                  </div>
+                </div>
+                <form
+                  className="section-body hourly-panel"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    saveHourly();
+                  }}
+                >
+                  <div className="hourly-field">
+                    <LabeledInput
+                      id="settings-hour"
+                      label={t("hourlyFieldLabel")}
+                      placeholder={t("hourlyPlaceholder")}
+                      value={hourlyDraft}
+                      onChange={setHourlyDraft}
+                    />
+                    <p className="hourly-current">
+                      {t("hourlyCurrent")}:{" "}
+                      <strong>{formatCurrency(config.valorHora, locale)}</strong>
+                      {t("perHourSuffix")}
+                    </p>
+                    <div className="hourly-actions">
+                      <button
+                        type="button"
+                        className="button-muted"
+                        disabled={!hourlyDirty}
+                        onClick={() => setHourlyDraft(String(config.valorHora))}
+                      >
+                        {t("discardChanges")}
+                      </button>
+                      <button type="submit" disabled={!hourlyDirty}>
+                        {t("save")}
+                      </button>
+                    </div>
+                  </div>
+                  <aside className="hourly-example">
+                    <span className="section-kicker">{t("hourlyExampleKicker")}</span>
+                    <p>{t("hourlyExampleText")}</p>
+                    <div className="hourly-example-calc">
+                      <span>8 h × {formatCurrency(hourlyDraftValue, locale)}</span>
+                      <strong>{formatCurrency(8 * hourlyDraftValue, locale)}</strong>
+                    </div>
+                  </aside>
+                </form>
+              </section>
+            )}
+
+            {view === "pieces" && (
+              <section className="section-box">
+                <div className="section-head">
+                  <div>
+                    <SettingsCrumb
+                      label={t("settings")}
+                      onBack={() => setView("settings")}
+                    />
+                    <h1>{t("pieceTypes")}</h1>
+                    <p>
+                      {config.pecas.length}{" "}
+                      {config.pecas.length === 1 ? t("pieceTypeOne") : t("pieceTypeMany")}{" "}
+                      — {t("piecesPageIntro")}
+                    </p>
+                  </div>
+                  <button type="button" onClick={() => openPieceModal("new")}>
+                    {t("newPiece")}
+                  </button>
+                </div>
+
+                <div className="accounts-toolbar toolbar-pieces">
+                  <LabeledInput
+                    id="pieces-search"
+                    label={t("accountsSearchLabel")}
+                    placeholder={t("searchPiece")}
+                    value={piecesSearch}
+                    onChange={setPiecesSearch}
+                  />
+                  <SelectField
+                    id="pieces-sort"
+                    label={t("sortBy")}
+                    value={piecesSort}
+                    onChange={(value) => setPiecesSort(value as "name" | "usage")}
+                  >
+                    <option value="name">{t("sortName")}</option>
+                    <option value="usage">{t("sortUsage")}</option>
+                  </SelectField>
+                </div>
+
+                {visiblePieces.length === 0 ? (
+                  <div className="empty-state">
+                    <span className="empty-state-glyph" aria-hidden="true">
+                      {piecesQuery ? "⌕" : "◎"}
+                    </span>
+                    <h3>{piecesQuery ? t("noResultsTitle") : t("emptyPiecesTitle")}</h3>
+                    <p>{piecesQuery ? t("noResultsHint") : t("emptyPiecesHint")}</p>
+                    {!piecesQuery && (
+                      <button type="button" onClick={() => openPieceModal("new")}>
+                        {t("newPiece")}
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <div className="account-row-head cols-pieces" aria-hidden="true">
+                      <span>{t("colPiece")}</span>
+                      <span style={{ textAlign: "right" }}>{t("colAccounts")}</span>
+                      <span />
+                    </div>
+                    {visiblePieces.map(({ piece, index, uso }) => (
+                      <div key={`${piece}-${index}`} className="account-row cols-pieces">
+                        <button
+                          type="button"
+                          className="account-row-main"
+                          aria-label={`${t("editPiece")}: ${piece}`}
+                          onClick={() => openPieceModal(index)}
+                        >
+                          <span className="account-row-vehicle">{piece}</span>
+                        </button>
+                        <span className="account-row-count">
+                          {uso} {uso === 1 ? t("accountOne") : t("accountMany")}
+                        </span>
+                        <span className="account-row-actions">
+                          <button
+                            type="button"
+                            className="icon-btn"
+                            aria-label={`${t("editPiece")}: ${piece}`}
+                            onClick={() => openPieceModal(index)}
+                          >
+                            ✎
+                          </button>
+                          <button
+                            type="button"
+                            className="icon-btn danger"
+                            aria-label={`${t("removePieceAction")}: ${piece}`}
+                            onClick={() => removePiece(index)}
+                          >
+                            ✕
+                          </button>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
+
+            {view === "clients" && (
+              <section className="section-box">
+                <div className="section-head">
+                  <div>
+                    <SettingsCrumb
+                      label={t("settings")}
+                      onBack={() => setView("settings")}
+                    />
+                    <h1>{t("clients")}</h1>
+                    <p>
+                      {visibleClients.length}{" "}
+                      {visibleClients.length === 1 ? t("clientOne") : t("clientMany")}
+                      {clientsFiltering
+                        ? ` ${t("ofTotal")} ${config.clientes.length}`
+                        : ""}{" "}
+                      — {t("clientsPageIntro")}
+                    </p>
+                  </div>
+                  <button type="button" onClick={() => openClientModal("new")}>
+                    {t("newClient")}
+                  </button>
+                </div>
+
+                <div className="accounts-toolbar toolbar-clients">
+                  <LabeledInput
+                    id="clients-search"
+                    label={t("accountsSearchLabel")}
+                    placeholder={t("searchClient")}
+                    value={clientsSearch}
+                    onChange={setClientsSearch}
+                  />
+                  <div>
+                    <span className="field-label">{t("clientTypeLabel")}</span>
+                    <div className="mode-switch" role="group" aria-label={t("clientTypeLabel")}>
+                      {(["", "PF", "PJ"] as const).map((tipo) => (
+                        <button
+                          key={tipo || "all"}
+                          type="button"
+                          className={clientsTypeFilter === tipo ? "is-on" : ""}
+                          aria-pressed={clientsTypeFilter === tipo}
+                          onClick={() => setClientsTypeFilter(tipo)}
+                        >
+                          {tipo || t("filterAll")}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <SelectField
+                    id="clients-sort"
+                    label={t("sortBy")}
+                    value={clientsSort}
+                    onChange={(value) =>
+                      setClientsSort(value as "name" | "recent" | "usage")
+                    }
+                  >
+                    <option value="name">{t("sortName")}</option>
+                    <option value="recent">{t("sortRecent")}</option>
+                    <option value="usage">{t("sortUsage")}</option>
+                  </SelectField>
+                </div>
+
+                {visibleClients.length === 0 ? (
+                  <div className="empty-state">
+                    <span className="empty-state-glyph" aria-hidden="true">
+                      {clientsFiltering ? "⌕" : "◎"}
+                    </span>
+                    <h3>
+                      {clientsFiltering ? t("noResultsTitle") : t("emptyClientsTitle")}
+                    </h3>
+                    <p>{clientsFiltering ? t("noResultsHint") : t("emptyClientsHint")}</p>
+                    {!clientsFiltering && (
+                      <button type="button" onClick={() => openClientModal("new")}>
+                        {t("newClient")}
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <div className="account-row-head cols-clients" aria-hidden="true">
+                      <span>{t("colClient")}</span>
+                      <span>{t("doc")}</span>
+                      <span>{t("contact")}</span>
+                      <span style={{ textAlign: "right" }}>{t("colAccounts")}</span>
+                      <span />
+                    </div>
+                    {visibleClients.map((client) => {
+                      const uso = usoDoCliente(client);
+                      const apelido = client.tipo === "PF" ? client.apelido : client.fantasia;
+                      return (
+                        <div key={client.id} className="account-row cols-clients">
+                          <button
+                            type="button"
+                            className="account-row-main"
+                            aria-label={`${t("editClient")}: ${client.nome}`}
+                            onClick={() => openClientModal(client)}
+                          >
+                            <span className="account-row-vehicle">{client.nome}</span>
+                            {apelido && (
+                              <span className="account-row-meta">{apelido}</span>
+                            )}
+                          </button>
+                          <span className="account-row-client">
+                            <span className="type-tag">{client.tipo}</span> {client.doc}
+                          </span>
+                          <span className="account-row-client">
+                            {client.tel || t("noPhone")}
+                            {client.email && (
+                              <span className="account-row-meta">{client.email}</span>
+                            )}
+                          </span>
+                          <span className="account-row-count">
+                            {uso} {uso === 1 ? t("accountOne") : t("accountMany")}
+                          </span>
+                          <span className="account-row-actions">
+                            <button
+                              type="button"
+                              className="icon-btn"
+                              aria-label={`${t("editClient")}: ${client.nome}`}
+                              onClick={() => openClientModal(client)}
+                            >
+                              ✎
+                            </button>
+                            <button
+                              type="button"
+                              className="icon-btn danger"
+                              aria-label={`${t("removeClientAction")}: ${client.nome}`}
+                              onClick={() => removeClient(client.id)}
+                            >
+                              ✕
+                            </button>
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            )}
           </main>
 
-          {/* ================================================== GAVETA ==== */}
           <section
             ref={gavetaRef}
             className={drawerOpen ? "calc-drawer is-open" : "calc-drawer"}
@@ -4072,11 +4762,6 @@ function App() {
                   )}
                 </div>
 
-                {/* Eram quatro botões e dois deles limpavam: "nova conta"
-                    não criava conta nenhuma, zerava o formulário, e ficava
-                    do lado de "cadastrar conta", que salva. Sobraram as duas
-                    ações que fazem coisas diferentes; limpar virou controle
-                    discreto, porque desfazer não é ação principal. */}
                 <div className="actions-grid">
                   <button type="button" onClick={handleCalculate}>
                     {t("calculate")}
@@ -4155,7 +4840,6 @@ function App() {
         </>
       )}
 
-      {/* ==================================================== MODAIS ==== */}
       {termsOpen && (
         <Dialog
           title={t("termsTitle")}
@@ -4606,106 +5290,67 @@ function App() {
         </Dialog>
       )}
 
-      {settingsModal === "hora" && (
+      {pieceModal !== null && (
         <Dialog
-          title={t("hourlyValue")}
-          kicker={t("settingsKicker")}
+          title={pieceModal === "new" ? t("newPieceTitle") : t("editPiece")}
+          kicker={t("pieceTypes")}
           closeLabel={t("closeModal")}
           size="narrow"
-          onClose={() => setSettingsModal(null)}
+          onClose={() => setPieceModal(null)}
           footer={
             <>
               <span />
               <button
                 type="button"
                 className="button-muted"
-                onClick={() => setSettingsModal(null)}
+                onClick={() => setPieceModal(null)}
               >
                 {t("cancel")}
               </button>
-              <button type="button" onClick={() => setSettingsModal(null)}>
+              <button type="submit" form="piece-form">
                 {t("save")}
               </button>
             </>
           }
         >
-          <LabeledInput
-            id="settings-hour"
-            label={t("hourlyFieldLabel")}
-            placeholder={t("hourlyPlaceholder")}
-            value={String(config.valorHora)}
-            onChange={(value) =>
-              setConfig((prev) => ({ ...prev, valorHora: toNumber(value) }))
-            }
-          />
-        </Dialog>
-      )}
-
-      {settingsModal === "pecas" && (
-        <Dialog
-          title={t("managePieces")}
-          kicker={t("settingsKicker")}
-          closeLabel={t("closeModal")}
-          onClose={() => setSettingsModal(null)}
-        >
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "minmax(0, 1fr) auto",
-              gap: "10px",
-              alignItems: "end",
+          <form
+            id="piece-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              savePiece();
             }}
           >
             <LabeledInput
               id="settings-piece"
               label={t("pieceName")}
+              placeholder={t("piecePlaceholder")}
               value={newPiece}
               onChange={setNewPiece}
             />
-            <button type="button" style={{ width: "auto" }} onClick={addPiece}>
-              {t("addPiece")}
-            </button>
-          </div>
-
-          <div className="data-list">
-            {config.pecas.length === 0 ? (
-              <p className="modal-status">{t("emptyAccounts")}</p>
-            ) : (
-              config.pecas.map((piece, index) => (
-                <div key={`${piece}-${index}`} className="data-item">
-                  <span>{piece}</span>
-                  <button
-                    type="button"
-                    className="icon-btn danger"
-                    aria-label={`${t("removePieceAction")}: ${piece}`}
-                    onClick={() => removePiece(index)}
-                  >
-                    ×
-                  </button>
-                </div>
-              ))
+            {pieceModal !== "new" && usoDaPeca(config.pecas[pieceModal] ?? "") > 0 && (
+              <p className="modal-status">{t("pieceRenameHint")}</p>
             )}
-          </div>
+          </form>
         </Dialog>
       )}
 
-      {settingsModal === "clientes" && (
+      {clientModal !== null && (
         <Dialog
-          title={t("registerClient")}
-          kicker={t("settingsKicker")}
+          title={clientModal === "new" ? t("registerClient") : t("editClient")}
+          kicker={t("clients")}
           closeLabel={t("closeModal")}
-          onClose={() => setSettingsModal(null)}
+          onClose={() => setClientModal(null)}
           footer={
             <>
               <span />
               <button
                 type="button"
                 className="button-muted"
-                onClick={() => setSettingsModal(null)}
+                onClick={() => setClientModal(null)}
               >
                 {t("cancel")}
               </button>
-              <button type="button" onClick={addClient}>
+              <button type="button" onClick={saveClient}>
                 {t("saveClient")}
               </button>
             </>
@@ -4814,28 +5459,6 @@ function App() {
             />
           </div>
 
-          <div className="data-list">
-            {config.clientes.map((client) => (
-              <div key={client.id} className="data-item client-item">
-                <div>
-                  <strong>{client.nome}</strong>{" "}
-                  {client.fantasia ? `(${client.fantasia})` : ""}
-                  <div className="data-item-meta">
-                    {t("doc")}: {client.doc} · {t("contact")}:{" "}
-                    {client.tel || t("noPhone")}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  className="icon-btn danger"
-                  aria-label={`${t("removeClientAction")}: ${client.nome}`}
-                  onClick={() => removeClient(client.id)}
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-          </div>
         </Dialog>
       )}
     </div>

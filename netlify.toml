@@ -7,3 +7,10 @@
   from = "/*"
   to = "/index.html"
   status = 200
+
+# O service worker nao pode ficar preso em cache, senao um deploy novo
+# demora a chegar em quem ja instalou o app.
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"

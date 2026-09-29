@@ -20,11 +20,9 @@ async def processar_com_ia(texto_usuario):
         print(f"ERRO NA IA: {e}")
         return "Tive um erro de conexao com meu cerebro, chefe."
 
-# --- CONFIGURAÇÕES DE CAMINHOS ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, "model")
 
-# Função de Auto-Reparo que você tentou digitar no terminal
 def baixar_modelo_automatico():
     URL = "https://alphacephei.com/vosk/models/vosk-model-pt-fb-v0.1.1-pruned.zip"
     ZIP_PATH = os.path.join(BASE_DIR, "model.zip")
@@ -41,8 +39,6 @@ def baixar_modelo_automatico():
         os.remove(ZIP_PATH)
         print("L.I.L.Y: 'Modelo instalado com sucesso!'")
 
-# --- INICIALIZAÇÃO ---
-# Chamamos a função antes de carregar o Model
 baixar_modelo_automatico()
 
 model = Model(MODEL_PATH)
@@ -73,7 +69,6 @@ async def iniciar_lily():
     with sd.RawInputStream(samplerate=16000, blocksize=8000, dtype='int16',
                            channels=1, callback=callback):
         while True:
-            # PUSH-TO-TALK: Só ouve se segurar a tecla ALT
             if keyboard.is_pressed('alt'):
                 data = audio_queue.get()
                 if rec.AcceptWaveform(data):
@@ -89,7 +84,6 @@ async def iniciar_lily():
                             resposta = await processar_com_ia(comando)
                             await falar(resposta)
             else:
-                # Limpa a fila de áudio enquanto o botão não está pressionado
                 while not audio_queue.empty():
                     audio_queue.get()
                 await asyncio.sleep(0.1)

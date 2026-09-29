@@ -44,6 +44,7 @@ class LilyWebHandler(BaseHTTPRequestHandler):
             message = str(payload.get("message") or payload.get("text") or "").strip()
             speak = bool(payload.get("speak", True))
             contexto = payload.get("contexto")
+            historico = payload.get("historico")
 
             if not message:
                 self.send_json({"error": "Message is required"}, status=400)
@@ -53,9 +54,10 @@ class LilyWebHandler(BaseHTTPRequestHandler):
             if path == "/speak":
                 reply = message
             else:
-                # A acao sai do texto ANTES do TTS: senao a voz leria o
-                # bloco de comando em voz alta.
-                reply, acao = extrair_acao(ask_lily(message, contexto))
+                # Tira a acao antes do TTS, senao a voz le o bloco.
+                reply, acao = extrair_acao(
+                    ask_lily(message, contexto, historico)
+                )
             audio = asyncio.run(synthesize_to_base64(reply)) if speak else ""
             self.send_json(
                 {"reply": reply, "audio": audio, "voice": VOICE, "acao": acao}

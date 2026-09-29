@@ -1,15 +1,5 @@
 @import url("https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap");
 
-/* ==========================================================================
-   L.I.L.Y — sistema visual
-   Reestrutura de 2026-08-31. O núcleo neural saiu da caixa; a caixa passou a
-   ser exclusiva das seções (contas e ajustes). A navegação virou trilho fixo
-   e a calculadora virou gaveta de rodapé.
-   Regra que rege o arquivo inteiro: nenhum hex de marca cravado fora do bloco
-   :root / .app-shell.azul. Tudo passa por var(--primary) ou por
-   rgba(var(--lily-glow-rgb), a) — senão o tema azul quebra.
-   ========================================================================== */
-
 :root {
   --primary: #ffd600;
   --bg: #111;
@@ -17,26 +7,17 @@
   --text: #fff;
   --muted: #bdbdbd;
   --danger: #ff4444;
-  /* Verde próprio. Era #00ced1, exatamente o valor que --primary assume no
-     tema azul: toast de sucesso e toast de info ficavam idênticos lá. */
   --success: #25d07d;
   --lily-glow-rgb: 255, 214, 0;
   --lily-secondary-rgb: 255, 154, 58;
-  /* Contorno fino do bloco do núcleo (chips e cards de chat). Vive num token
-     porque #00ced1 é ~28% mais escuro que #ffd600 e o mesmo alpha reprova no
-     piso de 3:1 no tema azul. */
   --hairline: rgba(var(--lily-glow-rgb), 0.42);
 
-  /* Superfícies. --card continua sendo a da caixa das seções. */
   --surface-1: #161616;
   --surface-2: #1d1d1d;
   --surface-3: #262626;
   --line: rgba(255, 255, 255, 0.09);
   --line-2: rgba(255, 255, 255, 0.17);
 
-  /* As duas cores do switch amarela/azul. Ficam FORA do tema de propósito:
-     os dois botões representam os próprios temas, então pintar o ativo com
-     --primary faria o botão "AMARELA" ficar ciano no tema azul. */
   --mode-yellow: #ffd600;
   --mode-blue: #00ced1;
 
@@ -57,12 +38,6 @@
   box-sizing: border-box;
 }
 
-/* Os aneis do nucleo giram (lilySpin). Um elemento em rotacao tem caixa
-   delimitadora MAIOR que ele mesmo, e essa sobra entrava na largura rolavel do
-   documento: no celular aparecia uma barra horizontal e a gaveta esticava
-   junto. Cortar no eixo X resolve sem tocar no desenho: o que fica de fora e
-   canto transparente de um circulo. `clip` e o certo (nao cria contexto de
-   rolagem); `hidden` fica de reserva pra WebView antigo que nao conhece clip. */
 html,
 body {
   overflow-x: hidden;
@@ -99,7 +74,6 @@ a {
   --hairline: rgba(var(--lily-glow-rgb), 0.6);
 }
 
-/* Reduzir movimento: o núcleo continua desenhado, só para de girar. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -111,10 +85,6 @@ a {
   }
 }
 
-/* ============================================================ FUNDO HUD */
-/* A pele de HUD que antes vivia dentro do card do núcleo (a "caixa"). Virou
-   camada de fundo da tela inteira, bem mais fraca: o efeito continua, a
-   moldura não. */
 .app-bg {
   position: fixed;
   inset: 0;
@@ -139,7 +109,6 @@ a {
   opacity: 0.5;
 }
 
-/* ======================================================= TRILHO LATERAL */
 .app-rail {
   position: fixed;
   top: 0;
@@ -224,8 +193,6 @@ a {
 .rail-btn:focus-visible,
 .rail-avatar:focus-visible,
 
-/* Ícone sem rótulo é problema de acessibilidade: além do aria-label, todo
-   botão do trilho mostra o nome no hover e no foco. */
 .rail-tip {
   position: absolute;
   left: calc(100% + 10px);
@@ -261,9 +228,6 @@ a {
   width: 100%;
 }
 
-/* O gatilho da roda: um alvo redondo com a cor do modo ativo. A cor e a
-   assinatura do modo e nao acompanha o tema — o avancado e ciano em
-   qualquer pele, senao "avancado" ficaria amarelo no tema ciano. */
 .rail-mode-trigger {
   position: relative;
   display: grid;
@@ -305,8 +269,6 @@ a {
   background: var(--mode-blue);
   box-shadow: 0 0 12px rgba(0, 206, 209, 0.55);
 }
-
-/* ==================================== A RODA DE MODO DE CALCULO ==== */
 
 .modal-card.is-radial {
   width: min(470px, calc(100vw - 28px));
@@ -351,8 +313,6 @@ a {
   transition: stroke 0.18s ease;
 }
 
-/* O setor do modo em foco acende na cor dele; o modo que esta valendo
-   agora fica com o contorno aceso mesmo sem o cursor em cima. */
 .mode-sector.is-current path {
   stroke-width: 2;
 }
@@ -416,9 +376,6 @@ a {
   text-transform: uppercase;
 }
 
-/* Os alvos de clique: transparentes, por cima de cada metade da roda.
-   Assim o teclado e o leitor de tela pegam botoes de verdade em vez de
-   um <path> de SVG. */
 .mode-sector-hit {
   position: absolute;
   top: 0;
@@ -445,10 +402,6 @@ a {
   filter: none;
 }
 
-/* Nada de outline aqui: o alvo de clique e um retangulo por cima de meia
-   roda, e o anel de foco padrao desenhava uma meia-capsula amarela por
-   cima do desenho. Quem sinaliza o foco e o proprio setor, que acende
-   com a cor do modo e muda o texto do centro. */
 .mode-sector-hit:focus-visible {
   outline: none;
 }
@@ -457,8 +410,6 @@ a {
   filter: drop-shadow(0 0 10px rgba(var(--lily-glow-rgb), 0.35));
 }
 
-/* Reserva a linha do ATIVO AGORA para o centro nao pular de posicao
-   quando o modo em foco nao e o que esta valendo. */
 .mode-wheel-center em.is-idle {
   visibility: hidden;
 }
@@ -492,7 +443,6 @@ a {
   object-fit: cover;
 }
 
-/* ==================================================== MENU DO USUÁRIO */
 .user-pop {
   position: fixed;
   left: calc(var(--rail-w) + 10px);
@@ -627,22 +577,14 @@ a {
   font-size: 1.4rem;
 }
 
-/* ============================================================== VIEW */
 .app-view {
   position: relative;
   z-index: 1;
   margin-left: var(--rail-w);
   min-height: 100vh;
-  /* A gaveta e fixa e cobre o rodape. Reservar so a altura da aba dava
-     conta com ela fechada, mas com ela ABERTA o conteudo de baixo (o
-     chat, e os botoes de registrar que nascem nele) ficava escondido
-     atras. Agora o proprio JS mede a gaveta e escreve aqui. */
   padding: 34px 30px calc(var(--gaveta-h, var(--tab-h)) + 34px);
 }
 
-/* ================================================ HOME: NÚCLEO LIVRE */
-/* Sem background, sem borda, sem card. O núcleo flutua sobre --bg e o halo
-   vaza no fundo — que é justamente o que a moldura antiga cortava. */
 .core-stage {
   --core-d: clamp(220px, 27vw, 360px);
   display: grid;
@@ -655,15 +597,11 @@ a {
   isolation: isolate;
 }
 
-/* Com um console de voz ou o chat aberto o palco deixa de ser centralizado à
-   força: senão o card nasce abaixo da dobra. */
 .core-stage.has-console {
   min-height: 0;
   align-content: start;
 }
 
-/* As duas elipses que orbitam o núcleo. Parte do desenho neural: mantidas com
-   os mesmos valores, só reancoradas no novo palco. */
 .core-stage::before,
 .core-stage::after {
   content: "";
@@ -696,10 +634,6 @@ a {
   top: calc(8px + var(--core-d) * 0.06);
 }
 
-/* ===================================================== NÚCLEO NEURAL
-   Bloco intocado. Copiado literalmente do styles.css anterior: é a
-   identidade do produto e ele pediu explicitamente para não mexer.
-   Mudou só onde ele mora no DOM e o valor de --core-d. */
 .lily-core {
   width: var(--core-d, clamp(240px, 32vw, 412px));
   aspect-ratio: 1;
@@ -970,9 +904,6 @@ a {
   }
 }
 
-/* ================================ SAUDAÇÃO, PERGUNTA E ATALHOS */
-/* Mono só aqui e nos rótulos de HUD: é a identidade que ele escolheu manter.
-   O corpo do app continua em Montserrat. */
 .core-greet {
   margin: 0;
   max-width: 100%;
@@ -982,7 +913,6 @@ a {
   line-height: 1.5;
   text-align: center;
   text-transform: uppercase;
-  /* #b9c0bc sobre --bg dá ~9:1 — folgado para 12px. */
   color: #b9c0bc;
 }
 
@@ -1010,8 +940,7 @@ a {
   border: 0;
   border-radius: 0;
   background: rgba(var(--lily-glow-rgb), 0.06);
-  /* Contorno por inset box-shadow, não por border: o clip-path do chanfro
-     recorta box-shadow externo e border, e a borda sumiria nos cantos. */
+  /* inset box-shadow em vez de border: o clip-path do chanfro corta a borda. */
   box-shadow: inset 0 0 0 1px var(--hairline);
   color: var(--text);
   font-family: var(--mono);
@@ -1023,8 +952,6 @@ a {
   clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
 }
 
-/* O chip quente é CONTORNADO, não preenchido: o amarelo cheio está reservado
-   para o CALCULAR na gaveta, e dois primários na mesma tela competem. */
 .core-chip.is-hot,
 .core-chip.is-on {
   background: rgba(var(--lily-glow-rgb), 0.09);
@@ -1039,8 +966,6 @@ a {
   box-shadow: inset 0 0 0 1px var(--primary);
 }
 
-/* O chanfro come outline: o foco vira anel interno + drop-shadow, que segue a
-   silhueta do clip em vez de ser recortado por ela. */
 .core-chip:focus-visible,
 .lily-mini:focus-visible {
   outline: none;
@@ -1214,9 +1139,6 @@ a {
   background: linear-gradient(180deg, rgba(var(--lily-glow-rgb), 0.94) 0%, var(--primary) 100%);
 }
 
-/* ============================================================== GAVETA */
-/* A calculadora. Sobe do rodapé, aba sempre visível, e o núcleo continua à
-   vista com ela aberta — que é o motivo de ser gaveta e não modal. */
 .calc-drawer {
   position: fixed;
   left: var(--rail-w);
@@ -1350,9 +1272,6 @@ a {
   gap: 16px;
 }
 
-/* Duas ações de peso dividem a largura e o limpar fica ao lado, do tamanho
-   do que ele é. Era um grid de quatro colunas iguais, o que dava a limpar
-   o mesmo peso visual de calcular e de salvar. */
 .actions-grid {
   display: flex;
   flex-wrap: wrap;
@@ -1428,7 +1347,6 @@ a {
   font-weight: 800;
 }
 
-/* ======================================================= CAMPOS E BOTÕES */
 input,
 select,
 textarea {
@@ -1441,8 +1359,6 @@ textarea {
   font-size: 15px;
 }
 
-/* Era rgba(255,214,0,.25) cravado: todo campo do app brilhava amarelo no tema
-   azul, ao lado de uma borda ciano. */
 input:focus,
 select:focus,
 textarea:focus {
@@ -1480,7 +1396,6 @@ select:disabled {
   left: 12px;
   padding: 0 5px;
   background: var(--surface-1);
-  /* Era #888 sobre --card: ~3.9:1, reprovado para texto. */
   color: var(--muted);
   font-size: 0.92rem;
   pointer-events: none;
@@ -1498,8 +1413,6 @@ select:disabled {
   text-transform: uppercase;
 }
 
-/* Variante do rótulo flutuante para dentro dos modais, que têm outra
-   superfície atrás do "recorte" do label. */
 .on-surface-2 .input-group label {
   background: var(--surface-2);
 }
@@ -1575,9 +1488,6 @@ button:focus-visible {
   color: var(--danger);
 }
 
-/* O input de arquivo era opacity:0 e continuava focável e invisível, enquanto
-   o <label> que faz de botão não era focável. Agora ele some do fluxo de foco
-   e o rótulo desenha o anel por :focus-within. */
 .file-button {
   position: relative;
   display: inline-grid;
@@ -1633,9 +1543,6 @@ button:focus-visible {
   filter: brightness(1.15);
 }
 
-/* ============================================ A CAIXA (só nas seções) */
-/* O tratamento emoldurado que morreu da home. Chanfrado com ticks de canto,
-   em vez do border-radius: 20px de antes. */
 .section-box {
   position: relative;
   border: 1px solid rgba(var(--lily-glow-rgb), 0.34);
@@ -1740,7 +1647,6 @@ button:focus-visible {
   color: #111;
 }
 
-/* =========================================== LISTA / TABELA DE CONTAS */
 .account-row-head,
 .account-row {
   display: grid;
@@ -1773,8 +1679,6 @@ button:focus-visible {
   box-shadow: inset 3px 0 0 var(--primary);
 }
 
-/* O corpo da linha é um botão: selecionar a conta pelo teclado precisa
-   funcionar, e o botão de apagar não pode ficar aninhado dentro dele. */
 .account-row-main {
   width: auto;
   padding: 0;
@@ -1796,8 +1700,6 @@ button:focus-visible {
 }
 
 .account-row-vehicle {
-  /* <span> dentro de <button> e inline: sem isto o nome do veiculo e a linha
-     de peca/data saiam grudados numa linha so. */
   display: block;
   font-weight: 700;
   font-size: 0.95rem;
@@ -1874,15 +1776,12 @@ button:focus-visible {
   margin-top: 6px;
 }
 
-/* ============================================================= AJUSTES */
 .grid-settings {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
   gap: 16px;
 }
 
-/* Eram <div onClick> — os únicos acessos a Valor da Hora, Tipos de Peça e
-   Clientes, e nenhum deles alcançável pelo teclado. Agora são <button>. */
 .setting-card {
   display: grid;
   gap: 8px;
@@ -1932,7 +1831,147 @@ button:focus-visible {
   line-height: 1.45;
 }
 
-/* ============================================================== MODAIS */
+.setting-card-stat {
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  color: var(--primary);
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.settings-crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  margin-bottom: 8px;
+  padding: 0;
+  background: transparent;
+  color: var(--primary);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+.settings-crumb:hover {
+  filter: none;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.mode-switch button.is-on {
+  background: var(--primary);
+  color: #111;
+}
+
+.accounts-toolbar.toolbar-pieces {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+}
+
+.accounts-toolbar.toolbar-clients {
+  grid-template-columns: minmax(0, 2fr) auto minmax(0, 1fr);
+}
+
+.account-row-head.cols-pieces,
+.account-row.cols-pieces {
+  grid-template-columns: minmax(0, 1fr) 90px 74px;
+}
+
+.account-row-head.cols-clients,
+.account-row.cols-clients {
+  grid-template-columns: minmax(0, 1.8fr) minmax(0, 1.3fr) minmax(0, 1.5fr) 90px 74px;
+}
+
+.account-row-count {
+  min-width: 90px;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.type-tag {
+  display: inline-block;
+  margin-right: 4px;
+  padding: 2px 6px;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  color: var(--primary);
+  font-family: var(--mono);
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.hourly-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+}
+
+.hourly-field {
+  display: grid;
+  gap: 12px;
+  max-width: 420px;
+}
+
+.hourly-current {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.hourly-current strong {
+  color: var(--text);
+}
+
+.hourly-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.hourly-actions button {
+  width: auto;
+}
+
+.hourly-example {
+  display: grid;
+  gap: 10px;
+  padding: 20px;
+  border: 1px solid var(--line-2);
+  border-radius: 14px;
+  background: var(--surface-2);
+}
+
+.hourly-example p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.hourly-example-calc {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: 0.85rem;
+}
+
+.hourly-example-calc strong {
+  color: var(--primary);
+  font-size: 1.1rem;
+}
+
 .modal-scrim {
   position: fixed;
   inset: 0;
@@ -1944,8 +1983,6 @@ button:focus-visible {
   backdrop-filter: blur(3px);
 }
 
-/* position: relative é o que faltava: os × de fechar são absolutos e
-   ancoravam no canto da JANELA, fora do card. */
 .modal-card {
   position: relative;
   display: flex;
@@ -2186,7 +2223,6 @@ button:focus-visible {
   line-height: 1.55;
 }
 
-/* ============================================================== AUTH */
 #auth-screen {
   position: relative;
   z-index: 1;
@@ -2356,15 +2392,23 @@ button:focus-visible {
   width: auto;
 }
 
+.auth-forgot {
+  justify-self: end;
+  margin-top: -6px;
+  font-size: 0.8rem;
+}
+
+.auth-forgot:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .auth-switch-copy {
   margin: 0;
   color: var(--muted);
   font-size: 0.84rem;
 }
 
-/* ============================================================= TOASTS */
-/* Canto superior direito, não no centro: no centro cobriam o núcleo e o
-   cartão de login, que é exatamente onde o olho está. */
 .toast-stack {
   position: fixed;
   top: 18px;
@@ -2413,7 +2457,6 @@ button:focus-visible {
   border: 0;
 }
 
-/* ============================================================= MOBILE */
 @media (max-width: 820px) {
   :root {
     --rail-w: 60px;
@@ -2506,6 +2549,26 @@ button:focus-visible {
     opacity: 1;
   }
 
+  /* .account-row.cols-* e mais especifico que .account-row, por isso repete aqui. */
+  .accounts-toolbar.toolbar-pieces,
+  .accounts-toolbar.toolbar-clients,
+  .hourly-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .account-row.cols-clients {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .account-row.cols-clients .account-row-client {
+    grid-column: 1 / -1;
+  }
+
+  .account-row.cols-clients .account-row-count {
+    grid-column: 1;
+    text-align: left;
+  }
+
   .auth-shell {
     grid-template-columns: 1fr;
   }
@@ -2564,9 +2627,6 @@ button:focus-visible {
   }
 }
 
-/* A oferta de registrar, que o APP faz depois que ela calcula. Fica dentro da
-   bolha dela, mas com cara de acao e nao de fala, para o chefe nao confundir
-   texto do modelo com botao de verdade. */
 .lily-chat-oferta {
   display: flex;
   flex-wrap: wrap;
