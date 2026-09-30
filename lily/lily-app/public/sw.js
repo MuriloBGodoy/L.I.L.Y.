@@ -1,6 +1,3 @@
-// Service worker da L.I.L.Y.: deixa o app instalavel e abre a casca
-// mesmo sem rede. Dados (Firebase, API, motor de IA) nunca passam pelo
-// cache: so arquivos do proprio site.
 const CACHE = "lily-v1";
 const CASCA = ["/", "/manifest.json", "/icons/icon-192.png", "/icons/icon-512.png"];
 

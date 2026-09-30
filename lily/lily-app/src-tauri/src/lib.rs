@@ -1,4 +1,3 @@
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 use std::{
     fs::File,
     io::Write,
@@ -13,11 +12,6 @@ use tauri::Manager;
 
 struct LilyVoiceState {
     child: Mutex<Option<Child>>,
-}
-
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
 #[tauri::command]
@@ -206,7 +200,6 @@ pub fn run() {
         })
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
-            greet,
             start_lily_voice,
             stop_lily_voice,
             ask_lily_chat
